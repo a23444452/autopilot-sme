@@ -62,11 +62,13 @@ class LLMRouter:
         if settings.ANTHROPIC_API_KEY:
             self._anthropic = anthropic.AsyncAnthropic(
                 api_key=settings.ANTHROPIC_API_KEY,
+                max_retries=0,
             )
 
         if settings.OPENAI_API_KEY:
             self._openai = openai.AsyncOpenAI(
                 api_key=settings.OPENAI_API_KEY,
+                max_retries=0,
             )
 
     async def call(
@@ -214,6 +216,7 @@ class LLMRouter:
         client = openai.AsyncOpenAI(
             base_url=f"{settings.OLLAMA_BASE_URL}/v1",
             api_key="ollama",  # Ollama doesn't require a real key
+            max_retries=0,
         )
 
         messages: list[dict[str, str]] = []

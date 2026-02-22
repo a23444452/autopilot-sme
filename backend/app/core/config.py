@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 
+    # --- CORS ---
+    CORS_ORIGINS: str = "http://localhost:3000"
+
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
