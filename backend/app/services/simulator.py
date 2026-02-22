@@ -16,15 +16,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.order import OrderItem
 from app.models.product import Product
 from app.models.production_line import ProductionLine
 from app.models.schedule import ScheduledJob
-from app.services.scheduler import (
+from app.services.production_helpers import (
     DEFAULT_MAX_OVERTIME_HOURS,
-    DEFAULT_WORK_END_HOUR,
-    DEFAULT_WORK_START_HOUR,
-    SchedulerService,
+    advance_work_hours,
+    align_to_work_start,
+    calculate_job_overtime,
+    fetch_active_lines,
+    get_changeover_time,
+    is_product_allowed,
 )
 
 logger = logging.getLogger(__name__)
@@ -143,7 +145,7 @@ class SimulatorService:
         scenarios: list[SimulationScenario] = []
 
         for line in lines:
-            if not self._is_product_allowed(product.sku, line):
+            if not is_product_allowed(product.sku, line):
                 continue
 
             # Scenario A: Append to end of line's current schedule
@@ -214,14 +216,14 @@ class SimulatorService:
             last_sku = None
 
         # Align to work hours
-        start_time = SchedulerService._align_to_work_start(start_after)
+        start_time = align_to_work_start(start_after)
 
         # Calculate changeover
-        changeover = self._get_changeover_time(last_sku, product.sku, line)
+        changeover = get_changeover_time(last_sku, product.sku, line)
         job_start = start_time + timedelta(minutes=changeover)
-        job_end = self._advance_work_hours(job_start, production_hours)
+        job_end = advance_work_hours(job_start, production_hours)
 
-        overtime = SchedulerService._calculate_job_overtime(job_start, job_end)
+        overtime = calculate_job_overtime(job_start, job_end)
 
         scenario = SimulationScenario(
             name=f"Append to {line.name}",
@@ -263,7 +265,7 @@ class SimulatorService:
         )
 
         now = datetime.now(timezone.utc)
-        insert_time = SchedulerService._align_to_work_start(now)
+        insert_time = align_to_work_start(now)
 
         # Find insertion point: before the first job that hasn't started yet
         insert_idx = 0
@@ -277,14 +279,14 @@ class SimulatorService:
         # Determine changeover from preceding job
         if insert_idx > 0:
             prev_job = line_jobs[insert_idx - 1]
-            insert_time = SchedulerService._align_to_work_start(prev_job.planned_end)
+            insert_time = align_to_work_start(prev_job.planned_end)
             prev_sku = self._get_job_product_sku(prev_job, existing_jobs)
         else:
             prev_sku = None
 
-        changeover_in = self._get_changeover_time(prev_sku, product.sku, line)
+        changeover_in = get_changeover_time(prev_sku, product.sku, line)
         rush_start = insert_time + timedelta(minutes=changeover_in)
-        rush_end = self._advance_work_hours(rush_start, production_hours)
+        rush_end = advance_work_hours(rush_start, production_hours)
 
         # Calculate impact on subsequent jobs
         affected_orders: list[AffectedOrder] = []
@@ -293,15 +295,15 @@ class SimulatorService:
         for job in line_jobs[insert_idx:]:
             # Changeover from rush product to this job's product
             job_sku = self._get_job_product_sku(job, existing_jobs)
-            changeover_out = self._get_changeover_time(product.sku, job_sku, line)
-            new_start = SchedulerService._align_to_work_start(
+            changeover_out = get_changeover_time(product.sku, job_sku, line)
+            new_start = align_to_work_start(
                 cascade_time + timedelta(minutes=changeover_out)
             )
 
             job_duration_hours = (
                 (job.planned_end - job.planned_start).total_seconds() / 3600.0
             )
-            new_end = self._advance_work_hours(new_start, job_duration_hours)
+            new_end = advance_work_hours(new_start, job_duration_hours)
 
             delay_minutes = max(
                 (new_end - job.planned_end).total_seconds() / 60.0, 0.0
@@ -317,13 +319,11 @@ class SimulatorService:
                 )
 
             cascade_time = new_end
-            # After the first displaced job, changeover is between consecutive jobs
-            product_sku_placeholder = job_sku
 
-        overtime = SchedulerService._calculate_job_overtime(rush_start, rush_end)
+        overtime = calculate_job_overtime(rush_start, rush_end)
         # Add overtime from displaced jobs
         for ao in affected_orders:
-            overtime += SchedulerService._calculate_job_overtime(
+            overtime += calculate_job_overtime(
                 ao.new_end - timedelta(hours=1), ao.new_end
             )
 
@@ -443,10 +443,7 @@ class SimulatorService:
 
     async def _fetch_active_lines(self) -> list[ProductionLine]:
         """Fetch all active production lines."""
-        result = await self.db.execute(
-            select(ProductionLine).where(ProductionLine.status == "active")
-        )
-        return list(result.scalars().all())
+        return await fetch_active_lines(self.db)
 
     async def _fetch_planned_jobs(self) -> list[ScheduledJob]:
         """Fetch all currently planned/in-progress jobs with their products."""
@@ -462,38 +459,8 @@ class SimulatorService:
     # Utility Helpers
     # ---------------------------------------------------------------
 
-    @staticmethod
-    def _is_product_allowed(product_sku: str, line: ProductionLine) -> bool:
-        """Check if a product is allowed on a production line."""
-        if line.allowed_products is None:
-            return True
-        allowed = line.allowed_products
-        if isinstance(allowed, list):
-            return product_sku in allowed
-        if isinstance(allowed, dict) and "skus" in allowed:
-            return product_sku in allowed["skus"]
-        return True
-
-    @staticmethod
-    def _get_changeover_time(
-        from_sku: str | None, to_sku: str, line: ProductionLine
-    ) -> float:
-        """Get changeover time in minutes between products on a line."""
-        if from_sku is None or from_sku == to_sku:
-            return 0.0
-
-        matrix = line.changeover_matrix
-        if matrix and isinstance(matrix, dict):
-            key = f"{from_sku}->{to_sku}"
-            if key in matrix:
-                return float(matrix[key])
-            reverse_key = f"{to_sku}->{from_sku}"
-            if reverse_key in matrix:
-                return float(matrix[reverse_key])
-            if "default" in matrix:
-                return float(matrix["default"])
-
-        return 30.0
+    # Backward-compatible static method aliases for external callers
+    _advance_work_hours = staticmethod(advance_work_hours)
 
     @staticmethod
     def _get_job_product_sku(
@@ -503,54 +470,3 @@ class SimulatorService:
         if job.product and hasattr(job.product, "sku"):
             return job.product.sku
         return None
-
-    @staticmethod
-    def _advance_work_hours(start: datetime, hours: float) -> datetime:
-        """Advance a datetime by a number of working hours, respecting work schedule."""
-        remaining = hours
-        current = start
-
-        while remaining > 0:
-            day_end = current.replace(
-                hour=DEFAULT_WORK_END_HOUR, minute=0, second=0, microsecond=0
-            )
-
-            # If past work hours, jump to next work day
-            if current.hour >= DEFAULT_WORK_END_HOUR:
-                current = (current + timedelta(days=1)).replace(
-                    hour=DEFAULT_WORK_START_HOUR, minute=0, second=0, microsecond=0
-                )
-                while current.weekday() >= 5:
-                    current += timedelta(days=1)
-                day_end = current.replace(hour=DEFAULT_WORK_END_HOUR)
-
-            if current.hour < DEFAULT_WORK_START_HOUR:
-                current = current.replace(
-                    hour=DEFAULT_WORK_START_HOUR, minute=0, second=0, microsecond=0
-                )
-
-            # Skip weekends
-            while current.weekday() >= 5:
-                current += timedelta(days=1)
-
-            available = (day_end - current).total_seconds() / 3600.0
-            if available <= 0:
-                current = (current + timedelta(days=1)).replace(
-                    hour=DEFAULT_WORK_START_HOUR, minute=0, second=0, microsecond=0
-                )
-                while current.weekday() >= 5:
-                    current += timedelta(days=1)
-                continue
-
-            if remaining <= available:
-                current = current + timedelta(hours=remaining)
-                remaining = 0
-            else:
-                remaining -= available
-                current = (current + timedelta(days=1)).replace(
-                    hour=DEFAULT_WORK_START_HOUR, minute=0, second=0, microsecond=0
-                )
-                while current.weekday() >= 5:
-                    current += timedelta(days=1)
-
-        return current

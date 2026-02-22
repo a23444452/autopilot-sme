@@ -12,6 +12,7 @@ from typing import Any
 
 import anthropic
 import openai
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 
@@ -53,9 +54,10 @@ class _UsageRecord:
 class LLMRouter:
     """Routes LLM calls through a multi-model fallback chain with usage tracking."""
 
-    def __init__(self) -> None:
+    def __init__(self, db: AsyncSession | None = None) -> None:
         self._anthropic: anthropic.AsyncAnthropic | None = None
         self._openai: openai.AsyncOpenAI | None = None
+        self._db = db
         self._usage_log: list[_UsageRecord] = []
 
         # Initialize clients based on available API keys
@@ -105,7 +107,7 @@ class LLMRouter:
                     "LLM provider %s failed for task_type=%s: %s",
                     provider, task_type, exc,
                 )
-                self._log_usage(
+                await self._log_usage(
                     provider=provider,
                     model="",
                     input_tokens=0,
@@ -144,7 +146,7 @@ class LLMRouter:
         input_tokens = message.usage.input_tokens
         output_tokens = message.usage.output_tokens
 
-        self._log_usage(
+        await self._log_usage(
             provider="claude",
             model=model,
             input_tokens=input_tokens,
@@ -187,7 +189,7 @@ class LLMRouter:
         input_tokens = response.usage.prompt_tokens if response.usage else 0
         output_tokens = response.usage.completion_tokens if response.usage else 0
 
-        self._log_usage(
+        await self._log_usage(
             provider="openai",
             model=model,
             input_tokens=input_tokens,
@@ -235,7 +237,7 @@ class LLMRouter:
         input_tokens = response.usage.prompt_tokens if response.usage else 0
         output_tokens = response.usage.completion_tokens if response.usage else 0
 
-        self._log_usage(
+        await self._log_usage(
             provider="ollama",
             model=model,
             input_tokens=input_tokens,
@@ -258,7 +260,7 @@ class LLMRouter:
     # Usage logging
     # -------------------------------------------------------------------
 
-    def _log_usage(
+    async def _log_usage(
         self,
         provider: str,
         model: str,
@@ -269,7 +271,11 @@ class LLMRouter:
         success: bool,
         error: str | None = None,
     ) -> None:
-        """Record usage for auditing and compliance."""
+        """Record usage for auditing and compliance.
+
+        When a DB session is available, persists to ModelUsageLog via
+        ComplianceService.  Always keeps an in-memory copy as well.
+        """
         record = _UsageRecord(
             provider=provider,
             model=model,
@@ -285,6 +291,25 @@ class LLMRouter:
             "LLM usage: provider=%s model=%s tokens=%d+%d latency=%.0fms task=%s ok=%s",
             provider, model, input_tokens, output_tokens, latency_ms, task_type, success,
         )
+
+        # Persist to DB if session is available
+        if self._db is not None:
+            try:
+                from app.services.compliance_service import ComplianceService
+
+                compliance = ComplianceService(self._db)
+                await compliance.log_usage(
+                    model_name=model,
+                    provider=provider,
+                    task_type=task_type,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=int(round(latency_ms)),
+                    status="success" if success else "error",
+                    error_message=error,
+                )
+            except Exception as exc:
+                logger.warning("Failed to persist LLM usage to DB: %s", exc)
 
     def get_usage_log(self) -> list[dict[str, Any]]:
         """Return usage log as a list of dicts for compliance reporting."""

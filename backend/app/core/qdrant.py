@@ -1,35 +1,34 @@
-"""Qdrant vector database client initialization."""
+"""Qdrant vector database client initialization using app.state."""
 
-from qdrant_client import QdrantClient
+from fastapi import Request
 from qdrant_client.async_qdrant_client import AsyncQdrantClient
 
 from app.core.config import settings
 
-qdrant_client: AsyncQdrantClient | None = None
 
-
-async def init_qdrant() -> AsyncQdrantClient:
-    """Initialize the async Qdrant client. Called during app startup."""
-    global qdrant_client
-    qdrant_client = AsyncQdrantClient(
+async def init_qdrant(app_state: object) -> AsyncQdrantClient:
+    """Initialize the async Qdrant client and store it on app.state."""
+    client = AsyncQdrantClient(
         host=settings.QDRANT_HOST,
         port=settings.QDRANT_PORT,
         grpc_port=settings.QDRANT_GRPC_PORT,
         prefer_grpc=True,
     )
-    return qdrant_client
+    app_state.qdrant = client  # type: ignore[attr-defined]
+    return client
 
 
-async def close_qdrant() -> None:
-    """Close the Qdrant client. Called during app shutdown."""
-    global qdrant_client
-    if qdrant_client is not None:
-        await qdrant_client.close()
-        qdrant_client = None
+async def close_qdrant(app_state: object) -> None:
+    """Close the Qdrant client stored on app.state."""
+    client: AsyncQdrantClient | None = getattr(app_state, "qdrant", None)
+    if client is not None:
+        await client.close()
+        app_state.qdrant = None  # type: ignore[attr-defined]
 
 
-def get_qdrant() -> AsyncQdrantClient:
-    """FastAPI dependency that returns the Qdrant client."""
-    if qdrant_client is None:
+def get_qdrant_from_app(request: Request) -> AsyncQdrantClient:
+    """FastAPI dependency that returns the Qdrant client from app.state."""
+    client: AsyncQdrantClient | None = getattr(request.app.state, "qdrant", None)
+    if client is None:
         raise RuntimeError("Qdrant client not initialized. Call init_qdrant() first.")
-    return qdrant_client
+    return client

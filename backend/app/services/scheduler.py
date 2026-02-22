@@ -7,10 +7,11 @@ Phase 3: AI optimization using historical data via LLM
 
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,63 +20,45 @@ from app.models.product import Product
 from app.models.production_line import ProductionLine
 from app.models.schedule import ScheduledJob
 from app.schemas.schedule import ScheduleRequest, ScheduleResult, ScheduledJobResponse
+from app.services.production_helpers import (
+    DEFAULT_HOURS_PER_DAY,
+    DEFAULT_MAX_OVERTIME_HOURS,
+    DEFAULT_WORK_END_HOUR,
+    DEFAULT_WORK_START_HOUR,
+    align_to_work_start,
+    calculate_job_overtime,
+    fetch_active_lines,
+    get_changeover_time,
+    is_product_allowed,
+)
 
 logger = logging.getLogger(__name__)
-
-# Working hours configuration
-DEFAULT_WORK_START_HOUR = 8
-DEFAULT_WORK_END_HOUR = 17
-DEFAULT_HOURS_PER_DAY = DEFAULT_WORK_END_HOUR - DEFAULT_WORK_START_HOUR
-DEFAULT_MAX_OVERTIME_HOURS = 3
 
 
 class SchedulingError(Exception):
     """Raised when scheduling encounters an unrecoverable error."""
 
 
+@dataclass
 class _OrderTask:
     """Internal representation of a task to be scheduled."""
 
-    __slots__ = (
-        "order_item_id",
-        "order_id",
-        "product_id",
-        "product_sku",
-        "quantity",
-        "due_date",
-        "priority",
-        "cycle_time",
-        "setup_time",
-        "yield_rate",
-        "estimated_hours",
-    )
+    order_item_id: uuid.UUID
+    order_id: uuid.UUID
+    product_id: uuid.UUID
+    product_sku: str
+    quantity: int
+    due_date: datetime
+    priority: int
+    cycle_time: float
+    setup_time: float
+    yield_rate: float
+    has_learned_cycle_time: bool = False
+    estimated_hours: float = 0.0
 
-    def __init__(
-        self,
-        order_item_id: uuid.UUID,
-        order_id: uuid.UUID,
-        product_id: uuid.UUID,
-        product_sku: str,
-        quantity: int,
-        due_date: datetime,
-        priority: int,
-        cycle_time: float,
-        setup_time: float,
-        yield_rate: float,
-    ) -> None:
-        self.order_item_id = order_item_id
-        self.order_id = order_id
-        self.product_id = product_id
-        self.product_sku = product_sku
-        self.quantity = quantity
-        self.due_date = due_date
-        self.priority = priority
-        self.cycle_time = cycle_time
-        self.setup_time = setup_time
-        self.yield_rate = yield_rate
-        # Effective quantity accounting for yield loss
-        effective_qty = quantity / max(yield_rate, 0.01)
-        self.estimated_hours = (effective_qty * cycle_time) / 60.0 + setup_time / 60.0
+    def __post_init__(self) -> None:
+        effective_qty = self.quantity / max(self.yield_rate, 0.01)
+        self.estimated_hours = (effective_qty * self.cycle_time) / 60.0 + self.setup_time / 60.0
 
 
 class _LineSlot:
@@ -192,9 +175,7 @@ class SchedulerService:
 
     async def _fetch_active_lines(self) -> list[ProductionLine]:
         """Fetch all active production lines."""
-        stmt = select(ProductionLine).where(ProductionLine.status == "active")
-        result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+        return await fetch_active_lines(self.db)
 
     # ---------------------------------------------------------------
     # Phase 1: Rule-based Sort
@@ -219,6 +200,7 @@ class SchedulerService:
                         cycle_time=cycle_time,
                         setup_time=product.setup_time,
                         yield_rate=product.yield_rate,
+                        has_learned_cycle_time=product.learned_cycle_time is not None,
                     )
                 )
         return tasks
@@ -246,7 +228,7 @@ class SchedulerService:
         warnings: list[str] = []
 
         # Align start_time to next work hour
-        work_start = self._align_to_work_start(start_time)
+        work_start = align_to_work_start(start_time)
 
         # Initialize line slots
         slots = [_LineSlot(line, work_start) for line in lines]
@@ -274,7 +256,7 @@ class SchedulerService:
                 )
 
             # Track overtime
-            overtime = self._calculate_job_overtime(job_start, job_end)
+            overtime = calculate_job_overtime(job_start, job_end)
             if overtime > DEFAULT_MAX_OVERTIME_HOURS:
                 warnings.append(
                     f"Order item {task.order_item_id} requires {overtime:.1f}h overtime "
@@ -328,10 +310,10 @@ class SchedulerService:
 
         for slot in slots:
             # Check if product is allowed on this line
-            if not self._is_product_allowed(task.product_sku, slot.line):
+            if not is_product_allowed(task.product_sku, slot.line):
                 continue
 
-            changeover = self._get_changeover_time(
+            changeover = get_changeover_time(
                 slot.last_product_sku, task.product_sku, slot.line
             )
 
@@ -388,39 +370,6 @@ class SchedulerService:
 
         return score
 
-    def _is_product_allowed(self, product_sku: str, line: ProductionLine) -> bool:
-        """Check if a product is allowed on this production line."""
-        if line.allowed_products is None:
-            return True
-        allowed = line.allowed_products
-        if isinstance(allowed, list):
-            return product_sku in allowed
-        if isinstance(allowed, dict) and "skus" in allowed:
-            return product_sku in allowed["skus"]
-        return True
-
-    def _get_changeover_time(
-        self, from_sku: str | None, to_sku: str, line: ProductionLine
-    ) -> float:
-        """Get changeover time in minutes between two products on a line."""
-        if from_sku is None or from_sku == to_sku:
-            return 0.0
-
-        matrix = line.changeover_matrix
-        if matrix and isinstance(matrix, dict):
-            key = f"{from_sku}->{to_sku}"
-            if key in matrix:
-                return float(matrix[key])
-            # Check reverse or default
-            reverse_key = f"{to_sku}->{from_sku}"
-            if reverse_key in matrix:
-                return float(matrix[reverse_key])
-            if "default" in matrix:
-                return float(matrix["default"])
-
-        # Default changeover: 30 minutes
-        return 30.0
-
     # ---------------------------------------------------------------
     # Phase 3: AI Optimization (Placeholder)
     # ---------------------------------------------------------------
@@ -460,8 +409,42 @@ class SchedulerService:
     # Persistence
     # ---------------------------------------------------------------
 
+    async def _supersede_planned_jobs(self, order_item_ids: list[uuid.UUID]) -> int:
+        """Mark existing 'planned' jobs as 'superseded' for the given order items.
+
+        This prevents duplicate scheduled jobs from accumulating when
+        generate_schedule is called multiple times.  Only jobs with status
+        'planned' are affected; 'in_progress' or 'completed' jobs are
+        left untouched.
+
+        Returns the number of superseded jobs.
+        """
+        if not order_item_ids:
+            return 0
+
+        result = await self.db.execute(
+            update(ScheduledJob)
+            .where(
+                ScheduledJob.order_item_id.in_(order_item_ids),
+                ScheduledJob.status == "planned",
+            )
+            .values(status="superseded")
+            .returning(ScheduledJob.id)
+        )
+        superseded_ids = list(result.scalars().all())
+        if superseded_ids:
+            logger.info(
+                "Superseded %d planned job(s) before re-scheduling",
+                len(superseded_ids),
+            )
+        return len(superseded_ids)
+
     async def _persist_jobs(self, job_dicts: list[dict[str, Any]]) -> list[ScheduledJob]:
-        """Create ScheduledJob records in the database."""
+        """Supersede existing planned jobs, then create new ScheduledJob records."""
+        # Collect order item IDs that are about to be re-scheduled
+        order_item_ids = [jd["order_item_id"] for jd in job_dicts]
+        await self._supersede_planned_jobs(order_item_ids)
+
         jobs: list[ScheduledJob] = []
         for jd in job_dicts:
             job = ScheduledJob(
@@ -520,7 +503,7 @@ class SchedulerService:
         utilization = (total_busy_hours / total_available_hours * 100.0) if total_available_hours > 0 else 0.0
 
         # Overtime hours
-        total_overtime = sum(self._calculate_job_overtime(j.planned_start, j.planned_end) for j in jobs)
+        total_overtime = sum(calculate_job_overtime(j.planned_start, j.planned_end) for j in jobs)
 
         return {
             "on_time_delivery_rate": round(on_time_rate, 1),
@@ -548,7 +531,7 @@ class SchedulerService:
 
         # Factor 1: Data quality — do products have learned cycle times?
         tasks_with_learned = sum(
-            1 for t in tasks if t.cycle_time != t.setup_time  # rough proxy
+            1 for t in tasks if t.has_learned_cycle_time
         )
         data_score = min(tasks_with_learned / max(len(tasks), 1) * 100.0, 100.0)
         scores.append(data_score)
@@ -578,41 +561,9 @@ class SchedulerService:
     # Utility Helpers
     # ---------------------------------------------------------------
 
-    @staticmethod
-    def _align_to_work_start(dt: datetime) -> datetime:
-        """Align a datetime to the next available work start time."""
-        result = dt.replace(minute=0, second=0, microsecond=0)
-        if result.hour < DEFAULT_WORK_START_HOUR:
-            result = result.replace(hour=DEFAULT_WORK_START_HOUR)
-        elif result.hour >= DEFAULT_WORK_END_HOUR:
-            result = result + timedelta(days=1)
-            result = result.replace(hour=DEFAULT_WORK_START_HOUR)
-        # Skip weekends
-        while result.weekday() >= 5:
-            result += timedelta(days=1)
-        return result
-
-    @staticmethod
-    def _calculate_job_overtime(start: datetime, end: datetime) -> float:
-        """Calculate overtime hours for a job spanning start to end."""
-        overtime = 0.0
-        current = start
-        while current < end:
-            day_end_regular = current.replace(
-                hour=DEFAULT_WORK_END_HOUR, minute=0, second=0, microsecond=0
-            )
-            if current >= day_end_regular:
-                # All remaining time today is overtime
-                next_day = (current + timedelta(days=1)).replace(
-                    hour=DEFAULT_WORK_START_HOUR, minute=0, second=0, microsecond=0
-                )
-                ot_end = min(end, next_day)
-                overtime += (ot_end - current).total_seconds() / 3600.0
-                current = next_day
-            else:
-                # Move to end of regular hours or job end
-                current = min(end, day_end_regular)
-        return max(overtime, 0.0)
+    # Backward-compatible static method aliases for external callers
+    _align_to_work_start = staticmethod(align_to_work_start)
+    _calculate_job_overtime = staticmethod(calculate_job_overtime)
 
     @staticmethod
     def _job_to_response(job: ScheduledJob) -> ScheduledJobResponse:

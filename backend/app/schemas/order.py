@@ -31,7 +31,7 @@ class OrderCreate(BaseModel):
     order_no: str = Field(..., max_length=50)
     customer_name: str = Field(..., max_length=200)
     due_date: datetime
-    priority: int = Field(default=5, ge=1, le=10)
+    priority: int = Field(default=5, ge=1, le=5)
     notes: str | None = None
     items: list[OrderItemCreate] = Field(default_factory=list)
 
