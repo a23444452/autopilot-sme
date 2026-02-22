@@ -25,7 +25,7 @@ class MemoryEntry(Base):
         String(50), nullable=False, comment="Category for grouping memories"
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
     importance: Mapped[float] = mapped_column(
         Float, nullable=False, server_default="0.5", comment="Importance score 0-1"
     )

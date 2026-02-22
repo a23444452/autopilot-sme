@@ -30,7 +30,7 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
 
 // ─── Inline Edit Hook ─────────────────────────────────────────────────────────
 
-function useInlineEdit<T extends Record<string, unknown>>() {
+function useInlineEdit<T extends object>() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Partial<T>>({})
 

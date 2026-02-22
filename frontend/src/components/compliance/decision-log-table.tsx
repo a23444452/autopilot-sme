@@ -74,7 +74,7 @@ export function DecisionLogTable({ logs, pageSize = 10 }: DecisionLogTableProps)
 
   // Get unique decision types for filter
   const decisionTypes = useMemo(
-    () => [...new Set(logs.map((l) => l.decision_type))],
+    () => Array.from(new Set(logs.map((l) => l.decision_type))),
     [logs],
   )
 

@@ -41,8 +41,8 @@ export function GanttChart({ jobs }: GanttChartProps) {
     if (jobs.length === 0) return null
 
     // Get unique production line IDs and product IDs
-    const lineIds = [...new Set(jobs.map((j) => j.production_line_id))]
-    const productIds = [...new Set(jobs.map((j) => j.product_id))]
+    const lineIds = Array.from(new Set(jobs.map((j) => j.production_line_id)))
+    const productIds = Array.from(new Set(jobs.map((j) => j.product_id)))
 
     // Build short labels for Y-axis
     const lineLabels = lineIds.map((id) => `產線 ${id.slice(0, 6)}`)

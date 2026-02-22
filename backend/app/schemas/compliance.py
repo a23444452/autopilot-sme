@@ -23,6 +23,8 @@ class UsageStats(BaseModel):
 class ComplianceReport(BaseModel):
     """Compliance report for AI model usage."""
 
+    model_config = {"protected_namespaces": ()}
+
     report_id: str
     generated_at: datetime
     period_start: datetime

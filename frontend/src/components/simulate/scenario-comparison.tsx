@@ -65,7 +65,7 @@ function ScenarioCard({ result, isRecommended }: { result: SimulationResult; isR
       {/* Scenario Header */}
       <div className="mb-4">
         <h3 className="text-lg font-semibold">{result.scenario_name}</h3>
-        {result.metadata?.description && (
+        {result.metadata?.description != null && (
           <p className="mt-1 text-sm text-muted-foreground">
             {String(result.metadata.description)}
           </p>

@@ -15,7 +15,7 @@ class ProductionLineCreate(BaseModel):
     capacity_per_hour: int = Field(..., gt=0)
     efficiency_factor: float = Field(default=1.0, gt=0, le=1)
     status: str = Field(default="active", max_length=20)
-    allowed_products: dict[str, Any] | None = None
+    allowed_products: list[str] | None = None
     changeover_matrix: dict[str, Any] | None = None
 
 
@@ -28,7 +28,7 @@ class ProductionLineResponse(BaseModel):
     capacity_per_hour: int
     efficiency_factor: float
     status: str
-    allowed_products: dict[str, Any] | None
+    allowed_products: list[str] | None
     changeover_matrix: dict[str, Any] | None
     created_at: datetime
     updated_at: datetime
