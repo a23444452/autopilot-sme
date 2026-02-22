@@ -1,6 +1,6 @@
 """Database initialization utilities."""
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import Base, engine
@@ -40,5 +40,12 @@ async def reset_db() -> None:
 
 async def table_has_data(session: AsyncSession, table_name: str) -> bool:
     """Check if a table contains any rows."""
+    # Validate table_name against actual database tables to prevent SQL injection
+    valid_tables = await session.run_sync(
+        lambda sync_session: set(inspect(sync_session.bind).get_table_names())
+    )
+    if table_name not in valid_tables:
+        raise ValueError(f"Unknown table: {table_name!r}")
+
     result = await session.execute(text(f"SELECT EXISTS (SELECT 1 FROM {table_name} LIMIT 1)"))
     return result.scalar() or False

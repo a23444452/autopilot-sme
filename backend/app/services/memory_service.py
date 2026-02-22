@@ -312,6 +312,11 @@ class MemoryService:
 
         return hits
 
+    @staticmethod
+    def _escape_ilike(value: str) -> str:
+        """Escape special ILIKE characters (%, _, \\) to prevent pattern injection."""
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
     async def _sql_text_search(
         self,
         query: str,
@@ -320,8 +325,9 @@ class MemoryService:
         limit: int,
     ) -> list[dict[str, Any]]:
         """Fallback text search using SQL ILIKE when embedding is unavailable."""
+        escaped_query = self._escape_ilike(query)
         stmt = select(MemoryEntry).where(
-            MemoryEntry.content.ilike(f"%{query}%")
+            MemoryEntry.content.ilike(f"%{escaped_query}%")
         )
         if memory_type:
             stmt = stmt.where(MemoryEntry.memory_type == memory_type)
