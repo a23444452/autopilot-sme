@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 
+    # --- Production Schedule ---
+    WORK_START_HOUR: int = 8
+    WORK_END_HOUR: int = 17
+    MAX_OVERTIME_HOURS: int = 3
+
+    # --- Authentication ---
+    API_KEY: str = ""
+    API_KEY_HEADER: str = "X-API-Key"
+
     # --- CORS ---
     CORS_ORIGINS: str = "http://localhost:3000"
 

@@ -5,9 +5,15 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.rate_limit import rate_limit_strict
+from app.models.product import Product
+from app.models.production_line import ProductionLine
+from app.models.schedule import ScheduledJob
+from app.services.production_helpers import advance_work_hours, align_to_work_start
 from app.services.simulator import RushOrderInput, SimulationError, SimulatorService
 
 router = APIRouter(prefix="/simulate", tags=["simulate"])
@@ -41,7 +47,7 @@ class DeliveryEstimateResponse(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
-@router.post("/rush-order")
+@router.post("/rush-order", dependencies=[Depends(rate_limit_strict)])
 async def simulate_rush_order(
     payload: RushOrderRequest,
     db: AsyncSession = Depends(get_db),
@@ -66,7 +72,7 @@ async def simulate_rush_order(
         raise HTTPException(status_code=422, detail=str(exc))
 
 
-@router.post("/delivery", response_model=DeliveryEstimateResponse)
+@router.post("/delivery", response_model=DeliveryEstimateResponse, dependencies=[Depends(rate_limit_strict)])
 async def estimate_delivery(
     payload: DeliveryEstimateRequest,
     db: AsyncSession = Depends(get_db),
@@ -76,13 +82,6 @@ async def estimate_delivery(
     Uses the current schedule state and production capacity to estimate
     earliest, latest, and most likely completion dates with confidence.
     """
-    from sqlalchemy import select
-
-    from app.models.product import Product
-    from app.models.production_line import ProductionLine
-    from app.models.schedule import ScheduledJob
-    from app.services.scheduler import SchedulerService
-
     # Fetch product
     result = await db.execute(select(Product).where(Product.id == payload.product_id))
     product = result.scalar_one_or_none()
@@ -125,10 +124,9 @@ async def estimate_delivery(
         if line_available < earliest_start or earliest_start == now:
             earliest_start = line_available
 
-    aligned_start = SchedulerService._align_to_work_start(earliest_start)
-    from app.services.simulator import SimulatorService as SimSvc
+    aligned_start = align_to_work_start(earliest_start)
 
-    estimated_end = SimSvc._advance_work_hours(aligned_start, production_hours)
+    estimated_end = advance_work_hours(aligned_start, production_hours)
 
     # Confidence based on data quality
     confidence = 75.0
@@ -139,11 +137,11 @@ async def estimate_delivery(
         notes.append("Using standard cycle time (no historical data yet)")
 
     # Earliest: optimistic (no changeover, immediate start)
-    optimistic_start = SchedulerService._align_to_work_start(now)
-    earliest_end = SimSvc._advance_work_hours(optimistic_start, production_hours * 0.9)
+    optimistic_start = align_to_work_start(now)
+    earliest_end = advance_work_hours(optimistic_start, production_hours * 0.9)
 
     # Latest: pessimistic (changeover + queue delay)
-    latest_end = SimSvc._advance_work_hours(aligned_start, production_hours * 1.3)
+    latest_end = advance_work_hours(aligned_start, production_hours * 1.3)
 
     return DeliveryEstimateResponse(
         product_id=payload.product_id,

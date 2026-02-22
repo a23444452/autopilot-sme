@@ -11,7 +11,7 @@ from app.api.v1.router import api_v1_router
 from app.core.config import settings
 from app.core.database import async_session_factory, close_db, init_db
 from app.core.qdrant import close_qdrant, init_qdrant
-from app.core.redis import close_redis, init_redis
+from app.core.redis import close_redis_compat, init_redis_compat
 from app.db.seed import seed_if_empty
 
 logger = logging.getLogger(__name__)
@@ -34,28 +34,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         else:
             logger.info("Database already has data, skipping seed")
 
-    await init_redis()
+    await init_redis_compat(app.state)
     logger.info("Redis connected")
 
-    await init_qdrant()
+    await init_qdrant(app.state)
     logger.info("Qdrant connected")
 
     # Ensure Qdrant 'memories' collection exists
-    from app.core.qdrant import get_qdrant
     from app.services.memory_service import MemoryService
 
     async with async_session_factory() as session:
-        memory_svc = MemoryService(db=session, qdrant=get_qdrant())
+        memory_svc = MemoryService(db=session, qdrant=app.state.qdrant)
         await memory_svc.ensure_collection()
     logger.info("Qdrant memories collection ready")
 
     yield
 
     # Shutdown
-    await close_qdrant()
+    await close_qdrant(app.state)
     logger.info("Qdrant disconnected")
 
-    await close_redis()
+    await close_redis_compat(app.state)
     logger.info("Redis disconnected")
 
     await close_db()
@@ -75,8 +74,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS.split(","),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "Accept"],
 )
 
 # Register API v1 router
