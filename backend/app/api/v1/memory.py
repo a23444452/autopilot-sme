@@ -7,8 +7,9 @@ from qdrant_client.async_qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.qdrant import get_qdrant
+from app.core.qdrant import get_qdrant_from_app
 from app.schemas.memory import (
+    CreateFactRequest,
     DecisionLogResponse,
     MemoryEntryResponse,
     MemorySearch,
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/memory", tags=["memory"])
 
 def _get_memory_service(
     db: AsyncSession = Depends(get_db),
-    qdrant: AsyncQdrantClient = Depends(get_qdrant),
+    qdrant: AsyncQdrantClient = Depends(get_qdrant_from_app),
 ) -> MemoryService:
     """Dependency to construct a MemoryService."""
     return MemoryService(db=db, qdrant=qdrant)
@@ -59,16 +60,14 @@ async def list_facts(
     )
 
 
-@router.put("/facts", response_model=MemoryEntryResponse)
+@router.post("/facts", response_model=MemoryEntryResponse)
 async def create_fact(
-    memory_type: str = Query("structured"),
-    category: str = Query("general"),
-    content: str = Query(..., min_length=1),
+    payload: CreateFactRequest,
     svc: MemoryService = Depends(_get_memory_service),
 ) -> Any:
     """Create a new structured knowledge entry."""
     return await svc.create_memory(
-        memory_type=memory_type,
-        category=category,
-        content=content,
+        memory_type=payload.memory_type,
+        category=payload.category,
+        content=payload.content,
     )

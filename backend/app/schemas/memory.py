@@ -16,6 +16,14 @@ class MemorySearch(BaseModel):
     limit: int = Field(default=10, ge=1, le=100)
 
 
+class CreateFactRequest(BaseModel):
+    """Schema for creating a structured knowledge entry."""
+
+    memory_type: str = Field(default="structured", description="Memory type: structured, episodic, or semantic")
+    category: str = Field(default="general", description="Category of the memory entry")
+    content: str = Field(..., min_length=1, max_length=5000, description="Content of the memory entry")
+
+
 class MemoryEntryResponse(BaseModel):
     """Schema for memory entry responses."""
 
