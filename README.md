@@ -33,17 +33,31 @@ AutoPilot SME 是一個專為台灣中小型製造業（20-200 人）打造的 A
 ### 6. 敏感資料保護
 自動偵測 PII 等敏感資料，在送出至外部 LLM 前進行遮罩處理；高敏感內容自動路由至本地模型。
 
+## 安全機制
+
+| 機制 | 說明 |
+|------|------|
+| API Key 認證 | 所有 API 端點（除 `/health`）需提供 `X-API-Key` header；開發模式下可免認證 |
+| Rate Limiting | 一般端點 60 req/min，LLM 相關端點（`/chat`、`/simulate`）10 req/min；Redis + in-memory 雙層限流 |
+| CORS 限制 | 僅允許指定 origin、明確列出的 HTTP methods 和 headers |
+| SQL Injection 防護 | 資料表名稱白名單驗證、ILIKE 查詢特殊字元跳脫 |
+| PII 遮罩 | 敏感資料自動偵測與遮罩，高敏感內容路由至本地模型 |
+
 ## 技術架構
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │                    Frontend (Port 3000)              │
 │          Next.js 14 + shadcn/ui + ECharts           │
+│              Error Boundary + 離線提示               │
 └────────────────────────┬────────────────────────────┘
                          │ API Proxy (/api/*)
 ┌────────────────────────▼────────────────────────────┐
 │                    Backend (Port 8000)               │
 │               FastAPI + SQLAlchemy 2.0               │
+│  ┌────────────┐ ┌────────────┐ ┌──────────────────┐ │
+│  │ API Key 認證│ │ Rate Limit │ │ CORS 限制        │ │
+│  └────────────┘ └────────────┘ └──────────────────┘ │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────────┐ │
 │  │ 排程引擎 │ │ 模擬引擎 │ │ LLM Router (多模型)  │ │
 │  └──────────┘ └──────────┘ └──────────────────────┘ │
@@ -183,6 +197,16 @@ GET    /api/v1/compliance/decisions # 決策稽核紀錄
 
 完整 API 文件請參考：http://localhost:8000/docs
 
+### 認證方式
+
+所有 API 端點（除 `GET /health`）需要在 header 中提供 API Key：
+
+```bash
+curl -H "X-API-Key: your-secret-key" http://localhost:8000/api/v1/orders
+```
+
+開發模式下（未設定 `API_KEY` 環境變數），可免認證直接存取。
+
 ## 專案結構
 
 ```
@@ -192,20 +216,27 @@ autopilot-sme/
 ├── backend/                    # FastAPI 後端
 │   ├── app/
 │   │   ├── api/v1/             # API 路由
-│   │   ├── core/               # 核心設定（DB、Redis、Qdrant）
+│   │   ├── core/               # 核心設定
+│   │   │   ├── config.py       # 環境設定（含工作時間參數）
+│   │   │   ├── auth.py         # API Key 認證中介軟體
+│   │   │   ├── rate_limit.py   # Rate Limiting（Redis + in-memory）
+│   │   │   ├── database.py     # PostgreSQL 連線
+│   │   │   ├── redis.py        # Redis 連線（app.state 管理）
+│   │   │   └── qdrant.py       # Qdrant 連線（app.state + DI）
 │   │   ├── models/             # SQLAlchemy 資料模型
 │   │   ├── schemas/            # Pydantic 請求/回應 Schema
 │   │   ├── services/           # 業務邏輯層
 │   │   │   ├── scheduler.py    # 排程引擎
 │   │   │   ├── simulator.py    # 模擬引擎
+│   │   │   ├── production_helpers.py # 排程/模擬共用工具函式
 │   │   │   ├── chat_service.py # 對話服務
 │   │   │   ├── memory_service.py # 記憶系統
-│   │   │   ├── llm_router.py   # LLM 多模型路由
+│   │   │   ├── llm_router.py   # LLM 多模型路由（含 usage 持久化）
 │   │   │   ├── privacy_guard.py # 隱私防護
 │   │   │   └── compliance_service.py # 合規追蹤
 │   │   └── db/                 # 資料庫初始化 & 種子資料
 │   ├── alembic/                # 資料庫遷移
-│   ├── tests/                  # 測試
+│   ├── tests/                  # 測試（207 tests）
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/                   # Next.js 前端
@@ -225,6 +256,24 @@ autopilot-sme/
 │   └── package.json
 ```
 
+## 測試
+
+後端測試使用 pytest，目前共 207 個測試案例：
+
+```bash
+cd backend
+pip install -r requirements.txt
+pytest
+```
+
+測試涵蓋：
+- 排程引擎、模擬引擎、記憶系統、LLM 路由、隱私防護、合規追蹤
+- SQL Injection 防護驗證
+- Rate Limiting 行為驗證
+- Scheduler 重複排程防護
+- LLM Usage 持久化驗證
+- 跨服務整合測試（Chat → LLM → Memory pipeline）
+
 ## 環境變數說明
 
 ### 後端 (`backend/.env`)
@@ -238,6 +287,10 @@ autopilot-sme/
 | `ANTHROPIC_API_KEY` | Claude API 金鑰 | - |
 | `OPENAI_API_KEY` | OpenAI API 金鑰（備援） | - |
 | `OLLAMA_BASE_URL` | Ollama 本地 URL | `http://localhost:11434` |
+| `API_KEY` | API 認證金鑰（空字串則停用認證） | `""` |
+| `WORK_START_HOUR` | 工作日開始時間 | `8` |
+| `WORK_END_HOUR` | 工作日結束時間 | `17` |
+| `MAX_OVERTIME_HOURS` | 最大加班時數 | `3` |
 
 ### 前端 (`frontend/.env.local`)
 
