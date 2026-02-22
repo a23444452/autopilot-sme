@@ -1,10 +1,18 @@
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+
+/**
+ * Home page – redirects to /dashboard.
+ * Uses client-side redirect so the sidebar active state updates correctly.
+ */
 export default function Home() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24">
-      <h1 className="text-4xl font-bold">AutoPilot SME</h1>
-      <p className="mt-4 text-muted-foreground">
-        AI-powered manufacturing scheduling automation
-      </p>
-    </main>
-  );
+  const router = useRouter()
+
+  useEffect(() => {
+    router.replace('/dashboard')
+  }, [router])
+
+  return null
 }

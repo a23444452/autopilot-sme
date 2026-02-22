@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils'
  * Each maps to one of the 7 core pages.
  */
 const navItems = [
-  { href: '/', label: '儀表板', icon: LayoutDashboard },
+  { href: '/dashboard', label: '儀表板', icon: LayoutDashboard },
   { href: '/orders', label: '訂單管理', icon: BarChart3 },
   { href: '/schedule', label: '排程', icon: CalendarDays },
   { href: '/simulate', label: '模擬', icon: Shuffle },
@@ -49,8 +49,7 @@ export function Sidebar() {
       {/* Navigation Links */}
       <nav className="flex-1 space-y-1 p-2">
         {navItems.map(({ href, label, icon: Icon }) => {
-          const isActive =
-            href === '/' ? pathname === '/' : pathname.startsWith(href)
+          const isActive = pathname.startsWith(href)
 
           return (
             <Link
