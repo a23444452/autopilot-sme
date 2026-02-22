@@ -34,11 +34,11 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 const PRIORITY_LABELS: Record<number, string> = {
-  1: '低',
-  2: '中',
-  3: '高',
-  4: '急',
-  5: '最高',
+  1: '最高',
+  2: '高',
+  3: '中',
+  4: '低',
+  5: '最低',
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -159,9 +159,9 @@ export function OrderTable({ orders, pageSize = 10 }: OrderTableProps) {
                     <span
                       className={cn(
                         'inline-block rounded px-2 py-0.5 text-xs font-medium',
-                        order.priority >= 4
+                        order.priority <= 2
                           ? 'bg-red-100 text-red-800'
-                          : order.priority >= 3
+                          : order.priority <= 4
                             ? 'bg-amber-100 text-amber-800'
                             : 'bg-gray-100 text-gray-600',
                       )}

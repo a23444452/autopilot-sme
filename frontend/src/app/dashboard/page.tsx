@@ -16,16 +16,19 @@ async function getDashboardData(): Promise<{
   kpi: KpiData
   lines: LineWithProgress[]
   alerts: AlertItem[]
+  isOffline: boolean
 }> {
   try {
-    const [schedule, productionLines, orders] = await Promise.all([
+    const [jobs, productionLines, orders] = await Promise.all([
       getCurrentSchedule(),
       listProductionLines(),
       listOrders({ limit: 100 }),
     ])
 
-    // Derive KPI metrics from schedule data
-    const utilization = schedule.utilization_pct / 100
+    // Derive KPI metrics from jobs list
+    const totalJobs = jobs.length
+    const inProgressJobs = jobs.filter((j) => j.status === 'in_progress')
+    const utilization = totalJobs > 0 ? inProgressJobs.length / totalJobs : 0
 
     // Count on-time vs total completed orders
     const completedOrders = orders.filter((o) => o.status === 'completed')
@@ -39,7 +42,7 @@ async function getDashboardData(): Promise<{
 
     // Build line progress from scheduled jobs
     const lines: LineWithProgress[] = productionLines.map((line) => {
-      const lineJobs = schedule.jobs.filter(
+      const lineJobs = jobs.filter(
         (j) => j.production_line_id === line.id,
       )
       const completedJobs = lineJobs.filter((j) => j.status === 'completed')
@@ -53,19 +56,8 @@ async function getDashboardData(): Promise<{
       }
     })
 
-    // Generate alerts from schedule warnings and at-risk orders
+    // Generate alerts from at-risk orders
     const alerts: AlertItem[] = []
-
-    // Schedule warnings
-    schedule.warnings.forEach((warning, idx) => {
-      alerts.push({
-        id: `warning-${idx}`,
-        severity: 'warning',
-        title: '排程警告',
-        description: warning,
-        timestamp: new Date().toISOString(),
-      })
-    })
 
     // At-risk orders (due within 2 days and not completed)
     const now = new Date()
@@ -91,6 +83,8 @@ async function getDashboardData(): Promise<{
       })
 
     return {
+      // TODO: Trend values and qualityRate/overtimeHours are placeholders.
+      // These should be calculated from backend historical data (e.g. compare current vs previous period).
       kpi: {
         onTimeRate,
         onTimeTrend: 2.1,
@@ -103,10 +97,10 @@ async function getDashboardData(): Promise<{
       },
       lines,
       alerts,
+      isOffline: false,
     }
   } catch {
-    // Fallback mock data when backend is unavailable
-    return getMockDashboardData()
+    return { ...getMockDashboardData(), isOffline: true }
   }
 }
 
@@ -203,10 +197,25 @@ function getMockDashboardData(): {
  * Shows KPI cards, production line status, and alerts.
  */
 export default async function DashboardPage() {
-  const { kpi, lines, alerts } = await getDashboardData()
+  const { kpi, lines, alerts, isOffline } = await getDashboardData()
 
   return (
     <div className="space-y-6">
+      {/* Offline Data Banner */}
+      {isOffline && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            </svg>
+            使用離線資料
+          </div>
+          <p className="mt-1 text-xs text-amber-700">
+            無法連線至後端服務，目前顯示的是預設範例資料。資料僅供參考，不代表實際生產狀態。
+          </p>
+        </div>
+      )}
+
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">儀表板</h1>

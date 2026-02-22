@@ -21,7 +21,7 @@ export function OrderForm({ initialData, onSubmit, onCancel, isLoading }: OrderF
   const [orderNo, setOrderNo] = useState(initialData?.order_no ?? '')
   const [customerName, setCustomerName] = useState(initialData?.customer_name ?? '')
   const [dueDate, setDueDate] = useState(initialData?.due_date?.slice(0, 10) ?? '')
-  const [priority, setPriority] = useState(initialData?.priority ?? 2)
+  const [priority, setPriority] = useState(initialData?.priority ?? 5)
   const [notes, setNotes] = useState(initialData?.notes ?? '')
   const [items, setItems] = useState<OrderItemCreate[]>(
     initialData?.items?.map((i) => ({ product_id: i.product_id, quantity: i.quantity })) ?? [
@@ -131,11 +131,11 @@ export function OrderForm({ initialData, onSubmit, onCancel, isLoading }: OrderF
             onChange={(e) => setPriority(Number(e.target.value))}
             className={inputClass}
           >
-            <option value={1}>1 - 低</option>
-            <option value={2}>2 - 中</option>
-            <option value={3}>3 - 高</option>
-            <option value={4}>4 - 急</option>
-            <option value={5}>5 - 最高</option>
+            <option value={1}>1 - 最高</option>
+            <option value={2}>2 - 高</option>
+            <option value={3}>3 - 中</option>
+            <option value={4}>4 - 低</option>
+            <option value={5}>5 - 最低</option>
           </select>
         </div>
       </div>

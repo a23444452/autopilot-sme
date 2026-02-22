@@ -1,53 +1,19 @@
 'use client'
 
-import { CheckCircle2, AlertTriangle, Clock, DollarSign } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { SimulationResult } from '@/lib/types'
+import type { RushOrderScenario } from '@/lib/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ScenarioComparisonProps {
-  results: SimulationResult[]
-}
-
-// ─── Helper ──────────────────────────────────────────────────────────────────
-
-function formatMetricLabel(key: string): string {
-  const labels: Record<string, string> = {
-    on_time_rate: '準時交貨率',
-    utilization: '產線稼動率',
-    overtime_hours: '加班時數',
-    changeover_time: '換線時間',
-    completion_days: '完成天數',
-    delay_days: '延遲天數',
-    additional_cost: '額外成本',
-    affected_orders: '受影響訂單',
-  }
-  return labels[key] ?? key
-}
-
-function formatMetricValue(key: string, value: number): string {
-  if (key.includes('rate') || key.includes('utilization')) {
-    return `${(value * 100).toFixed(1)}%`
-  }
-  if (key.includes('cost')) {
-    return `NT$ ${value.toLocaleString()}`
-  }
-  if (key.includes('hours') || key.includes('time')) {
-    return `${value.toFixed(1)} hr`
-  }
-  if (key.includes('days')) {
-    return `${value.toFixed(0)} 天`
-  }
-  return String(value)
+  scenarios: RushOrderScenario[]
+  recommendedScenario: string | null
 }
 
 // ─── Single Scenario Card ────────────────────────────────────────────────────
 
-function ScenarioCard({ result, isRecommended }: { result: SimulationResult; isRecommended: boolean }) {
-  const metricEntries = Object.entries(result.metrics)
-  const affectedOrders = result.comparison?.affected_orders as string[] | undefined
-
+function ScenarioCard({ scenario, isRecommended }: { scenario: RushOrderScenario; isRecommended: boolean }) {
   return (
     <div
       className={cn(
@@ -64,48 +30,76 @@ function ScenarioCard({ result, isRecommended }: { result: SimulationResult; isR
 
       {/* Scenario Header */}
       <div className="mb-4">
-        <h3 className="text-lg font-semibold">{result.scenario_name}</h3>
-        {result.metadata?.description != null && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            {String(result.metadata.description)}
-          </p>
-        )}
+        <h3 className="text-lg font-semibold">{scenario.name}</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {scenario.description}
+        </p>
       </div>
 
       {/* Metrics Grid */}
       <div className="mb-4 grid grid-cols-2 gap-3">
-        {metricEntries.map(([key, value]) => (
-          <div key={key} className="rounded-md border bg-muted/30 px-3 py-2">
-            <p className="text-xs text-muted-foreground">{formatMetricLabel(key)}</p>
-            <p className="text-sm font-semibold">{formatMetricValue(key, value)}</p>
-          </div>
-        ))}
+        <div className="rounded-md border bg-muted/30 px-3 py-2">
+          <p className="text-xs text-muted-foreground">產線</p>
+          <p className="text-sm font-semibold">{scenario.production_line_name}</p>
+        </div>
+        <div className="rounded-md border bg-muted/30 px-3 py-2">
+          <p className="text-xs text-muted-foreground">完成時間</p>
+          <p className="text-sm font-semibold">
+            {new Date(scenario.completion_time).toLocaleString('zh-TW')}
+          </p>
+        </div>
+        <div className="rounded-md border bg-muted/30 px-3 py-2">
+          <p className="text-xs text-muted-foreground">生產時數</p>
+          <p className="text-sm font-semibold">{scenario.production_hours} hr</p>
+        </div>
+        <div className="rounded-md border bg-muted/30 px-3 py-2">
+          <p className="text-xs text-muted-foreground">換線時間</p>
+          <p className="text-sm font-semibold">{scenario.changeover_time} min</p>
+        </div>
+        <div className="rounded-md border bg-muted/30 px-3 py-2">
+          <p className="text-xs text-muted-foreground">加班時數</p>
+          <p className="text-sm font-semibold">{scenario.overtime_hours.toFixed(1)} hr</p>
+        </div>
+        <div className="rounded-md border bg-muted/30 px-3 py-2">
+          <p className="text-xs text-muted-foreground">額外成本</p>
+          <p className="text-sm font-semibold">NT$ {scenario.additional_cost.toLocaleString()}</p>
+        </div>
+        <div className="rounded-md border bg-muted/30 px-3 py-2">
+          <p className="text-xs text-muted-foreground">如期交貨</p>
+          <p className={cn('text-sm font-semibold', scenario.meets_target ? 'text-emerald-600' : 'text-destructive')}>
+            {scenario.meets_target ? '是' : '否'}
+          </p>
+        </div>
+        <div className="rounded-md border bg-muted/30 px-3 py-2">
+          <p className="text-xs text-muted-foreground">受影響訂單</p>
+          <p className="text-sm font-semibold">{scenario.affected_orders.length}</p>
+        </div>
       </div>
 
       {/* Affected Orders */}
-      {affectedOrders && affectedOrders.length > 0 && (
+      {scenario.affected_orders.length > 0 && (
         <div className="mb-4">
           <div className="flex items-center gap-1.5 text-sm font-medium text-amber-600">
             <AlertTriangle className="h-3.5 w-3.5" />
-            受影響訂單 ({affectedOrders.length})
+            受影響訂單 ({scenario.affected_orders.length})
           </div>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {affectedOrders.map((orderId) => (
-              <span
-                key={orderId}
-                className="rounded-full border bg-amber-50 px-2 py-0.5 text-xs text-amber-700"
+          <div className="mt-1.5 space-y-1">
+            {scenario.affected_orders.map((ao) => (
+              <div
+                key={ao.order_item_id}
+                className="rounded-md border bg-amber-50 px-3 py-1.5 text-xs text-amber-700"
               >
-                {orderId}
-              </span>
+                延遲 {ao.delay_minutes.toFixed(0)} 分鐘
+              </div>
             ))}
           </div>
         </div>
       )}
 
       {/* Warnings */}
-      {result.warnings.length > 0 && (
+      {scenario.warnings.length > 0 && (
         <div className="space-y-1.5">
-          {result.warnings.map((warning, i) => (
+          {scenario.warnings.map((warning, i) => (
             <div
               key={i}
               className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
@@ -126,32 +120,26 @@ function ScenarioCard({ result, isRecommended }: { result: SimulationResult; isR
  * Side-by-side scenario comparison cards showing impact details,
  * affected orders, costs, and recommendation badge for the best option.
  */
-export function ScenarioComparison({ results }: ScenarioComparisonProps) {
-  if (results.length === 0) {
+export function ScenarioComparison({ scenarios, recommendedScenario }: ScenarioComparisonProps) {
+  if (scenarios.length === 0) {
     return null
   }
-
-  // The first result with metadata.recommended === true, or the first one
-  const recommendedIndex = results.findIndex(
-    (r) => r.metadata?.recommended === true,
-  )
-  const bestIndex = recommendedIndex >= 0 ? recommendedIndex : 0
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">模擬結果比較</h2>
         <p className="text-sm text-muted-foreground">
-          共 {results.length} 個方案
+          共 {scenarios.length} 個方案
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        {results.map((result, index) => (
+        {scenarios.map((scenario) => (
           <ScenarioCard
-            key={result.scenario_name}
-            result={result}
-            isRecommended={index === bestIndex}
+            key={scenario.name}
+            scenario={scenario}
+            isRecommended={scenario.name === recommendedScenario}
           />
         ))}
       </div>

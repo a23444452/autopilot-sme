@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Zap } from 'lucide-react'
 import { useMutation } from '@/hooks/use-api'
 import { simulateRushOrder } from '@/lib/api'
-import type { SimulationRequest, SimulationResult } from '@/lib/types'
+import type { RushOrderRequest, RushOrderSimulationResponse } from '@/lib/types'
 import { SimulationForm, type SimulationFormData } from '@/components/simulate/simulation-form'
 import { ScenarioComparison } from '@/components/simulate/scenario-comparison'
 
@@ -15,47 +15,18 @@ import { ScenarioComparison } from '@/components/simulate/scenario-comparison'
  * and displays multi-scenario what-if analysis results.
  */
 export default function SimulatePage() {
-  const [results, setResults] = useState<SimulationResult[] | null>(null)
+  const [results, setResults] = useState<RushOrderSimulationResponse | null>(null)
 
-  const { mutate: doSimulate, isLoading } = useMutation<SimulationResult[], SimulationRequest>(
+  const { mutate: doSimulate, isLoading } = useMutation<RushOrderSimulationResponse, RushOrderRequest>(
     (data) => simulateRushOrder(data),
   )
 
   async function handleSimulate(formData: SimulationFormData) {
-    const request: SimulationRequest = {
-      scenarios: [
-        {
-          name: '標準插單',
-          description: '依優先順序插入現有排程',
-          changes: {
-            product_id: formData.product_id,
-            quantity: formData.quantity,
-            target_date: formData.target_date,
-            strategy: 'balanced',
-          },
-        },
-        {
-          name: '加急處理',
-          description: '最高優先，允許加班與換線',
-          changes: {
-            product_id: formData.product_id,
-            quantity: formData.quantity,
-            target_date: formData.target_date,
-            strategy: 'rush',
-          },
-        },
-        {
-          name: '效率優先',
-          description: '最小化換線與加班成本',
-          changes: {
-            product_id: formData.product_id,
-            quantity: formData.quantity,
-            target_date: formData.target_date,
-            strategy: 'efficiency',
-          },
-        },
-      ],
-      metrics: ['on_time_rate', 'utilization', 'overtime_hours', 'changeover_time', 'additional_cost', 'affected_orders'],
+    const request: RushOrderRequest = {
+      product_id: formData.product_id,
+      quantity: formData.quantity,
+      target_date: formData.target_date,
+      priority: 1,
     }
 
     const data = await doSimulate(request)
@@ -84,7 +55,12 @@ export default function SimulatePage() {
       </div>
 
       {/* Results */}
-      {results && <ScenarioComparison results={results} />}
+      {results && (
+        <ScenarioComparison
+          scenarios={results.scenarios}
+          recommendedScenario={results.recommended_scenario}
+        />
+      )}
     </div>
   )
 }

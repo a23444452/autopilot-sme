@@ -8,6 +8,8 @@ import type {
   ChatResponse,
   ComplianceReport,
   DecisionLogResponse,
+  DeliveryEstimateRequest,
+  DeliveryEstimateResponse,
   HealthCheck,
   MemoryEntryResponse,
   MemorySearch,
@@ -17,10 +19,11 @@ import type {
   ProductResponse,
   ProductionLineCreate,
   ProductionLineResponse,
+  RushOrderRequest,
+  RushOrderSimulationResponse,
   ScheduleRequest,
   ScheduleResult,
-  SimulationRequest,
-  SimulationResult,
+  ScheduledJobResponse,
   UsageStats,
 } from './types'
 
@@ -204,29 +207,29 @@ export async function generateSchedule(data: ScheduleRequest): Promise<ScheduleR
 export async function getCurrentSchedule(params?: {
   status?: string
   production_line_id?: string
-}): Promise<ScheduleResult> {
+  skip?: number
+  limit?: number
+}): Promise<ScheduledJobResponse[]> {
   const qs = new URLSearchParams()
   if (params?.status) qs.set('status', params.status)
   if (params?.production_line_id) qs.set('production_line_id', params.production_line_id)
+  if (params?.skip != null) qs.set('skip', String(params.skip))
+  if (params?.limit != null) qs.set('limit', String(params.limit))
   const query = qs.toString()
-  return request<ScheduleResult>(`/schedule/current${query ? `?${query}` : ''}`)
+  return request<ScheduledJobResponse[]>(`/schedule/current${query ? `?${query}` : ''}`)
 }
 
 // ─── Simulation ──────────────────────────────────────────────────────────────
 
-export async function simulateRushOrder(data: SimulationRequest): Promise<SimulationResult[]> {
-  return request<SimulationResult[]>('/simulate/rush-order', {
+export async function simulateRushOrder(data: RushOrderRequest): Promise<RushOrderSimulationResponse> {
+  return request<RushOrderSimulationResponse>('/simulate/rush-order', {
     method: 'POST',
     body: JSON.stringify(data),
   })
 }
 
-export async function simulateDelivery(data: {
-  product_id: string
-  quantity: number
-  target_date?: string
-}): Promise<SimulationResult> {
-  return request<SimulationResult>('/simulate/delivery', {
+export async function simulateDelivery(data: DeliveryEstimateRequest): Promise<DeliveryEstimateResponse> {
+  return request<DeliveryEstimateResponse>('/simulate/delivery', {
     method: 'POST',
     body: JSON.stringify(data),
   })
@@ -275,7 +278,7 @@ export async function createFact(data: {
   importance?: number
 }): Promise<MemoryEntryResponse> {
   return request<MemoryEntryResponse>('/memory/facts', {
-    method: 'PUT',
+    method: 'POST',
     body: JSON.stringify(data),
   })
 }

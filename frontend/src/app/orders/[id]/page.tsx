@@ -9,6 +9,16 @@ import { formatDate, formatDateShort } from '@/lib/utils'
 import type { OrderCreate, OrderResponse } from '@/lib/types'
 import { OrderForm } from '@/components/orders/order-form'
 
+// ─── Priority Helpers ────────────────────────────────────────────────────────
+
+const PRIORITY_LABELS: Record<number, string> = {
+  1: '最高',
+  2: '高',
+  3: '中',
+  4: '低',
+  5: '最低',
+}
+
 // ─── Status Helpers ──────────────────────────────────────────────────────────
 
 const STATUS_LABELS: Record<string, string> = {
@@ -154,7 +164,7 @@ export default function OrderDetailPage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">優先順序</p>
-                <p className="text-sm font-medium">{order.priority}</p>
+                <p className="text-sm font-medium">{PRIORITY_LABELS[order.priority] ?? order.priority}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">建立時間</p>

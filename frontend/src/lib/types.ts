@@ -72,7 +72,7 @@ export interface ProductionLineCreate {
   capacity_per_hour: number
   efficiency_factor?: number
   status?: string
-  allowed_products?: Record<string, unknown> | null
+  allowed_products?: string[] | null
   changeover_matrix?: Record<string, unknown> | null
 }
 
@@ -83,7 +83,7 @@ export interface ProductionLineResponse {
   capacity_per_hour: number
   efficiency_factor: number
   status: string
-  allowed_products: Record<string, unknown> | null
+  allowed_products: string[] | null
   changeover_matrix: Record<string, unknown> | null
   created_at: string
   updated_at: string
@@ -141,6 +141,56 @@ export interface SimulationResult {
   comparison: Record<string, unknown>
   warnings: string[]
   metadata: Record<string, unknown>
+}
+
+export interface RushOrderRequest {
+  product_id: string
+  quantity: number
+  target_date: string
+  priority?: number
+}
+
+export interface RushOrderSimulationResponse {
+  scenarios: RushOrderScenario[]
+  rush_order: Record<string, unknown>
+  recommended_scenario: string | null
+  total_scenarios: number
+}
+
+export interface RushOrderScenario {
+  name: string
+  description: string
+  production_line_id: string
+  production_line_name: string
+  completion_time: string
+  changeover_time: number
+  production_hours: number
+  affected_orders: {
+    order_item_id: string
+    original_end: string
+    new_end: string
+    delay_minutes: number
+  }[]
+  overtime_hours: number
+  additional_cost: number
+  meets_target: boolean
+  recommendation: boolean
+  warnings: string[]
+}
+
+export interface DeliveryEstimateRequest {
+  product_id: string
+  quantity: number
+}
+
+export interface DeliveryEstimateResponse {
+  product_id: string
+  quantity: number
+  estimated_completion: string
+  confidence: number
+  earliest: string
+  latest: string
+  notes: string[]
 }
 
 // ─── Chat ────────────────────────────────────────────────────────────────────
