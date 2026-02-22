@@ -41,6 +41,14 @@ class TestChatService:
 
     @pytest.fixture
     def chat_service(self, mock_db, mock_llm, mock_memory):
+        # ChatService calls db.execute() internally for schedule/line context.
+        # The result needs .scalars().all() to work synchronously.
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_execute_result = MagicMock()
+        mock_execute_result.scalars.return_value = mock_scalars
+        mock_db.execute.return_value = mock_execute_result
+
         return ChatService(
             db=mock_db,
             llm_router=mock_llm,
@@ -113,6 +121,13 @@ class TestChatService:
     @pytest.mark.asyncio
     async def test_privacy_sensitive_message_uses_local(self, mock_db, mock_llm, mock_memory):
         """Messages with PII trigger local LLM preference."""
+        # mock_db.execute needs to return sync .scalars().all() for internal queries
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_execute_result = MagicMock()
+        mock_execute_result.scalars.return_value = mock_scalars
+        mock_db.execute.return_value = mock_execute_result
+
         service = ChatService(
             db=mock_db,
             llm_router=mock_llm,

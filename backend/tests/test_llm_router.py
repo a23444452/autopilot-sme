@@ -146,7 +146,8 @@ class TestUsageLogging:
         # May be empty since we mocked _call_claude directly
         assert isinstance(log, list)
 
-    def test_log_usage_records_entry(self):
+    @pytest.mark.asyncio
+    async def test_log_usage_records_entry(self):
         """_log_usage appends a record."""
         with patch("app.services.llm_router.settings") as mock_settings:
             mock_settings.ANTHROPIC_API_KEY = ""
@@ -154,7 +155,7 @@ class TestUsageLogging:
             mock_settings.OLLAMA_BASE_URL = "http://localhost:11434"
             router = LLMRouter()
 
-        router._log_usage(
+        await router._log_usage(
             provider="claude", model="test-model",
             input_tokens=100, output_tokens=50,
             latency_ms=200.0, task_type="chat",
@@ -166,7 +167,8 @@ class TestUsageLogging:
         assert log[0]["success"] is True
         assert log[0]["input_tokens"] == 100
 
-    def test_log_usage_records_failure(self):
+    @pytest.mark.asyncio
+    async def test_log_usage_records_failure(self):
         """Failed calls are logged with error."""
         with patch("app.services.llm_router.settings") as mock_settings:
             mock_settings.ANTHROPIC_API_KEY = ""
@@ -174,7 +176,7 @@ class TestUsageLogging:
             mock_settings.OLLAMA_BASE_URL = "http://localhost:11434"
             router = LLMRouter()
 
-        router._log_usage(
+        await router._log_usage(
             provider="openai", model="gpt-4.1",
             input_tokens=0, output_tokens=0,
             latency_ms=0, task_type="chat",

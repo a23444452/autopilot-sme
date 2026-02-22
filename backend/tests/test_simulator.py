@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.services.production_helpers import is_product_allowed, get_changeover_time
 from app.services.simulator import (
     OVERTIME_COST_PER_HOUR,
     AffectedOrder,
@@ -412,17 +413,17 @@ class TestSimulatorUtilities:
     def test_is_product_allowed_no_restriction(self, line_factory):
         """No restriction means all products allowed."""
         line = line_factory.create(allowed_products=None)
-        assert SimulatorService._is_product_allowed("ANY", line) is True
+        assert is_product_allowed("ANY", line) is True
 
     def test_is_product_allowed_in_list(self, line_factory):
         """Product in allowed list is accepted."""
         line = line_factory.create(allowed_products=["SKU-A", "SKU-B"])
-        assert SimulatorService._is_product_allowed("SKU-A", line) is True
+        assert is_product_allowed("SKU-A", line) is True
 
     def test_is_product_not_allowed(self, line_factory):
         """Product not in allowed list is rejected."""
         line = line_factory.create(allowed_products=["SKU-A"])
-        assert SimulatorService._is_product_allowed("SKU-Z", line) is False
+        assert is_product_allowed("SKU-Z", line) is False
 
     def test_advance_work_hours_within_day(self):
         """Advancing within a work day stays on same day."""
@@ -442,9 +443,9 @@ class TestSimulatorUtilities:
     def test_changeover_same_product_zero(self, line_factory):
         """Same product has zero changeover."""
         line = line_factory.create(changeover_matrix={"default": 30})
-        assert SimulatorService._get_changeover_time("A", "A", line) == 0.0
+        assert get_changeover_time("A", "A", line) == 0.0
 
     def test_changeover_none_from_sku(self, line_factory):
         """None from_sku (first job) has zero changeover."""
         line = line_factory.create(changeover_matrix={"default": 30})
-        assert SimulatorService._get_changeover_time(None, "A", line) == 0.0
+        assert get_changeover_time(None, "A", line) == 0.0

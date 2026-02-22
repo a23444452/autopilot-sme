@@ -8,15 +8,19 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.order import Order, OrderItem
-from app.models.product import Product
-from app.models.production_line import ProductionLine
-from app.models.schedule import ScheduledJob
-
 
 # ---------------------------------------------------------------------------
-# Test Data Factories
+# Test Data Factories (using MagicMock for SQLAlchemy 2.0 compatibility)
 # ---------------------------------------------------------------------------
+
+
+def _make_mock(defaults: dict[str, Any], overrides: dict[str, Any]) -> MagicMock:
+    """Create a MagicMock with given attributes."""
+    merged = {**defaults, **overrides}
+    mock = MagicMock()
+    for k, v in merged.items():
+        setattr(mock, k, v)
+    return mock
 
 
 class ProductFactory:
@@ -25,7 +29,7 @@ class ProductFactory:
     _counter = 0
 
     @classmethod
-    def create(cls, **overrides: Any) -> Product:
+    def create(cls, **overrides: Any) -> MagicMock:
         cls._counter += 1
         defaults = {
             "id": uuid.uuid4(),
@@ -39,11 +43,7 @@ class ProductFactory:
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
         }
-        defaults.update(overrides)
-        product = Product.__new__(Product)
-        for k, v in defaults.items():
-            object.__setattr__(product, k, v)
-        return product
+        return _make_mock(defaults, overrides)
 
 
 class ProductionLineFactory:
@@ -52,7 +52,7 @@ class ProductionLineFactory:
     _counter = 0
 
     @classmethod
-    def create(cls, **overrides: Any) -> ProductionLine:
+    def create(cls, **overrides: Any) -> MagicMock:
         cls._counter += 1
         defaults = {
             "id": uuid.uuid4(),
@@ -66,11 +66,7 @@ class ProductionLineFactory:
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
         }
-        defaults.update(overrides)
-        line = ProductionLine.__new__(ProductionLine)
-        for k, v in defaults.items():
-            object.__setattr__(line, k, v)
-        return line
+        return _make_mock(defaults, overrides)
 
 
 class OrderFactory:
@@ -81,9 +77,9 @@ class OrderFactory:
     @classmethod
     def create(
         cls,
-        items: list[OrderItem] | None = None,
+        items: list | None = None,
         **overrides: Any,
-    ) -> Order:
+    ) -> MagicMock:
         cls._counter += 1
         defaults = {
             "id": uuid.uuid4(),
@@ -95,40 +91,32 @@ class OrderFactory:
             "notes": None,
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
+            "items": items or [],
         }
-        defaults.update(overrides)
-        order = Order.__new__(Order)
-        for k, v in defaults.items():
-            object.__setattr__(order, k, v)
-        object.__setattr__(order, "items", items or [])
-        return order
+        return _make_mock(defaults, overrides)
 
 
 class OrderItemFactory:
     """Factory for creating OrderItem instances for testing."""
 
     @classmethod
-    def create(cls, product: Product, order_id: uuid.UUID | None = None, **overrides: Any) -> OrderItem:
+    def create(cls, product: MagicMock, order_id: uuid.UUID | None = None, **overrides: Any) -> MagicMock:
         defaults = {
             "id": uuid.uuid4(),
             "order_id": order_id or uuid.uuid4(),
             "product_id": product.id,
             "quantity": 100,
             "created_at": datetime.now(timezone.utc),
+            "product": product,
         }
-        defaults.update(overrides)
-        item = OrderItem.__new__(OrderItem)
-        for k, v in defaults.items():
-            object.__setattr__(item, k, v)
-        object.__setattr__(item, "product", product)
-        return item
+        return _make_mock(defaults, overrides)
 
 
 class ScheduledJobFactory:
     """Factory for creating ScheduledJob instances for testing."""
 
     @classmethod
-    def create(cls, **overrides: Any) -> ScheduledJob:
+    def create(cls, **overrides: Any) -> MagicMock:
         now = datetime.now(timezone.utc)
         defaults = {
             "id": uuid.uuid4(),
@@ -143,15 +131,9 @@ class ScheduledJobFactory:
             "notes": None,
             "created_at": now,
             "updated_at": now,
+            "product": None,
         }
-        defaults.update(overrides)
-        job = ScheduledJob.__new__(ScheduledJob)
-        for k, v in defaults.items():
-            object.__setattr__(job, k, v)
-        # Default: no product relationship loaded
-        if "product" not in overrides:
-            object.__setattr__(job, "product", None)
-        return job
+        return _make_mock(defaults, overrides)
 
 
 # ---------------------------------------------------------------------------
@@ -253,5 +235,5 @@ def sample_order(order_factory, order_item_factory, sample_product):
         order_id=order.id,
         quantity=100,
     )
-    object.__setattr__(order, "items", [item])
+    order.items = [item]
     return order

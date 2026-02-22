@@ -182,4 +182,5 @@ class TestLocalLLMRouting:
 
     def test_phone_only_uses_cloud(self, guard):
         """Phone alone (weight 0.6) stays with cloud."""
-        assert guard.should_use_local_llm("電話 0912345678") is False
+        # Use dashed format to avoid bank_account regex overlap with undashed number
+        assert guard.should_use_local_llm("電話 0912-345-678") is False

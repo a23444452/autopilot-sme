@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.schemas.schedule import ScheduleRequest
+from app.services.production_helpers import is_product_allowed, get_changeover_time
 from app.services.scheduler import (
     DEFAULT_WORK_END_HOUR,
     DEFAULT_WORK_START_HOUR,
@@ -304,42 +305,35 @@ class TestUtilityMethods:
 
     def test_product_allowed_no_restriction(self, line_factory):
         """Product is allowed when line has no restrictions."""
-        svc = SchedulerService(MagicMock())
         line = line_factory.create(allowed_products=None)
-        assert svc._is_product_allowed("ANY-SKU", line) is True
+        assert is_product_allowed("ANY-SKU", line) is True
 
     def test_product_allowed_in_list(self, line_factory):
         """Product is allowed when SKU is in allowed list."""
-        svc = SchedulerService(MagicMock())
         line = line_factory.create(allowed_products=["SKU-A", "SKU-B"])
-        assert svc._is_product_allowed("SKU-A", line) is True
+        assert is_product_allowed("SKU-A", line) is True
 
     def test_product_not_allowed(self, line_factory):
         """Product is rejected when SKU is not in allowed list."""
-        svc = SchedulerService(MagicMock())
         line = line_factory.create(allowed_products=["SKU-A"])
-        assert svc._is_product_allowed("SKU-Z", line) is False
+        assert is_product_allowed("SKU-Z", line) is False
 
     def test_changeover_time_from_matrix(self, line_factory):
         """Changeover time uses matrix value."""
-        svc = SchedulerService(MagicMock())
         line = line_factory.create(changeover_matrix={"SKU-A->SKU-B": 20, "default": 30})
-        assert svc._get_changeover_time("SKU-A", "SKU-B", line) == 20.0
+        assert get_changeover_time("SKU-A", "SKU-B", line) == 20.0
 
     def test_changeover_time_default(self, line_factory):
         """Changeover time falls back to matrix default."""
-        svc = SchedulerService(MagicMock())
         line = line_factory.create(changeover_matrix={"default": 45})
-        assert svc._get_changeover_time("SKU-X", "SKU-Y", line) == 45.0
+        assert get_changeover_time("SKU-X", "SKU-Y", line) == 45.0
 
     def test_changeover_time_no_matrix(self, line_factory):
         """Changeover time defaults to 30 when no matrix."""
-        svc = SchedulerService(MagicMock())
         line = line_factory.create(changeover_matrix=None)
-        assert svc._get_changeover_time("SKU-X", "SKU-Y", line) == 30.0
+        assert get_changeover_time("SKU-X", "SKU-Y", line) == 30.0
 
     def test_changeover_same_product_is_zero(self, line_factory):
         """No changeover when product is the same."""
-        svc = SchedulerService(MagicMock())
         line = line_factory.create(changeover_matrix={"default": 30})
-        assert svc._get_changeover_time("SKU-A", "SKU-A", line) == 0.0
+        assert get_changeover_time("SKU-A", "SKU-A", line) == 0.0
