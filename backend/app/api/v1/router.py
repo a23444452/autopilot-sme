@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.v1.chat import router as chat_router
 from app.api.v1.compliance import router as compliance_router
+from app.api.v1.matching import router as matching_router
 from app.api.v1.memory import router as memory_router
 from app.api.v1.orders import router as orders_router
 from app.api.v1.process_routes import router as process_routes_router
@@ -38,5 +39,6 @@ _authenticated.include_router(chat_router)
 _authenticated.include_router(compliance_router)
 _authenticated.include_router(stations_router)
 _authenticated.include_router(process_routes_router)
+_authenticated.include_router(matching_router)
 
 api_v1_router.include_router(_authenticated)
