@@ -237,3 +237,99 @@ def sample_order(order_factory, order_item_factory, sample_product):
     )
     order.items = [item]
     return order
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 Factories: ProcessStation, ProcessRoute, LineCapability
+# ---------------------------------------------------------------------------
+
+
+class ProcessStationFactory:
+    """Factory for creating ProcessStation mock instances."""
+
+    _counter = 0
+
+    @classmethod
+    def create(cls, **overrides: Any) -> MagicMock:
+        cls._counter += 1
+        now = datetime.now(timezone.utc)
+        defaults = {
+            "id": uuid.uuid4(),
+            "production_line_id": uuid.uuid4(),
+            "name": f"Station-{cls._counter}",
+            "station_order": cls._counter,
+            "equipment_type": "SMT",
+            "standard_cycle_time": 45.0,
+            "actual_cycle_time": None,
+            "capabilities": None,
+            "status": "active",
+            "created_at": now,
+            "updated_at": now,
+        }
+        return _make_mock(defaults, overrides)
+
+
+class ProcessRouteFactory:
+    """Factory for creating ProcessRoute mock instances."""
+
+    _counter = 0
+
+    @classmethod
+    def create(cls, **overrides: Any) -> MagicMock:
+        cls._counter += 1
+        now = datetime.now(timezone.utc)
+        defaults = {
+            "id": uuid.uuid4(),
+            "product_id": uuid.uuid4(),
+            "version": 1,
+            "is_active": True,
+            "steps": [
+                {"station_order": 1, "equipment_type": "SMT", "cycle_time_sec": 45.0},
+                {"station_order": 2, "equipment_type": "reflow", "cycle_time_sec": 120.0},
+            ],
+            "source": "manual",
+            "source_file": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        return _make_mock(defaults, overrides)
+
+
+class LineCapabilityFactory:
+    """Factory for creating LineCapabilityMatrix mock instances."""
+
+    _counter = 0
+
+    @classmethod
+    def create(cls, **overrides: Any) -> MagicMock:
+        cls._counter += 1
+        defaults = {
+            "id": uuid.uuid4(),
+            "production_line_id": uuid.uuid4(),
+            "equipment_type": "SMT",
+            "capability_params": None,
+            "throughput_range": None,
+            "updated_at": datetime.now(timezone.utc),
+        }
+        return _make_mock(defaults, overrides)
+
+
+@pytest.fixture
+def station_factory():
+    """Provide ProcessStationFactory for tests."""
+    ProcessStationFactory._counter = 0
+    return ProcessStationFactory
+
+
+@pytest.fixture
+def route_factory():
+    """Provide ProcessRouteFactory for tests."""
+    ProcessRouteFactory._counter = 0
+    return ProcessRouteFactory
+
+
+@pytest.fixture
+def capability_factory():
+    """Provide LineCapabilityFactory for tests."""
+    LineCapabilityFactory._counter = 0
+    return LineCapabilityFactory
