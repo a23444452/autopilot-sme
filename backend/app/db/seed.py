@@ -12,7 +12,10 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.line_capability import LineCapabilityMatrix
 from app.models.order import Order, OrderItem
+from app.models.process_route import ProcessRoute
+from app.models.process_station import ProcessStation
 from app.models.product import Product
 from app.models.production_line import ProductionLine
 
@@ -329,6 +332,246 @@ def _create_orders_with_items() -> list[Order]:
     return orders
 
 
+def _create_process_stations() -> list[ProcessStation]:
+    """Create process stations for each production line."""
+    stations: list[ProcessStation] = []
+
+    # SMT-Line-1: 3-station SMT flow
+    for i, (name, eq_type, cycle) in enumerate(
+        [("印刷", "solder_paste", 30.0), ("貼片", "SMT", 45.0), ("回焊", "reflow", 120.0)],
+        start=1,
+    ):
+        stations.append(
+            ProcessStation(
+                production_line_id=LINE_IDS["SMT-Line-1"],
+                name=name,
+                station_order=i,
+                equipment_type=eq_type,
+                standard_cycle_time=cycle,
+                status="active",
+            )
+        )
+
+    # SMT-Line-2: 4-station precision SMT flow
+    for i, (name, eq_type, cycle) in enumerate(
+        [
+            ("印刷", "solder_paste", 35.0),
+            ("貼片", "SMT", 55.0),
+            ("回焊", "reflow", 130.0),
+            ("AOI檢測", "AOI", 25.0),
+        ],
+        start=1,
+    ):
+        stations.append(
+            ProcessStation(
+                production_line_id=LINE_IDS["SMT-Line-2"],
+                name=name,
+                station_order=i,
+                equipment_type=eq_type,
+                standard_cycle_time=cycle,
+                status="active",
+            )
+        )
+
+    # Assembly-A: 3-station assembly
+    for i, (name, eq_type, cycle) in enumerate(
+        [("組裝", "assembly", 90.0), ("焊接", "soldering", 60.0), ("測試", "test", 45.0)],
+        start=1,
+    ):
+        stations.append(
+            ProcessStation(
+                production_line_id=LINE_IDS["Assembly-A"],
+                name=name,
+                station_order=i,
+                equipment_type=eq_type,
+                standard_cycle_time=cycle,
+                status="active",
+            )
+        )
+
+    # Assembly-B: 4-station precision assembly
+    for i, (name, eq_type, cycle) in enumerate(
+        [
+            ("CNC加工", "CNC", 180.0),
+            ("組裝", "assembly", 120.0),
+            ("測試", "test", 60.0),
+            ("包裝", "packaging", 30.0),
+        ],
+        start=1,
+    ):
+        stations.append(
+            ProcessStation(
+                production_line_id=LINE_IDS["Assembly-B"],
+                name=name,
+                station_order=i,
+                equipment_type=eq_type,
+                standard_cycle_time=cycle,
+                status="active",
+            )
+        )
+
+    return stations
+
+
+def _create_process_routes() -> list[ProcessRoute]:
+    """Create process routes for each product."""
+    return [
+        # PCB-A100: SMT flow
+        ProcessRoute(
+            product_id=PRODUCT_IDS["PCB-A100"],
+            version=1,
+            is_active=True,
+            steps=[
+                {"station_order": 1, "equipment_type": "solder_paste", "cycle_time_sec": 30.0},
+                {"station_order": 2, "equipment_type": "SMT", "cycle_time_sec": 45.0},
+                {"station_order": 3, "equipment_type": "reflow", "cycle_time_sec": 120.0},
+            ],
+            source="manual",
+        ),
+        # PCB-B200: SMT flow (faster)
+        ProcessRoute(
+            product_id=PRODUCT_IDS["PCB-B200"],
+            version=1,
+            is_active=True,
+            steps=[
+                {"station_order": 1, "equipment_type": "solder_paste", "cycle_time_sec": 25.0},
+                {"station_order": 2, "equipment_type": "SMT", "cycle_time_sec": 35.0},
+                {"station_order": 3, "equipment_type": "reflow", "cycle_time_sec": 100.0},
+            ],
+            source="manual",
+        ),
+        # SENSOR-T1: SMT + AOI
+        ProcessRoute(
+            product_id=PRODUCT_IDS["SENSOR-T1"],
+            version=1,
+            is_active=True,
+            steps=[
+                {"station_order": 1, "equipment_type": "solder_paste", "cycle_time_sec": 35.0},
+                {"station_order": 2, "equipment_type": "SMT", "cycle_time_sec": 55.0},
+                {"station_order": 3, "equipment_type": "reflow", "cycle_time_sec": 130.0},
+                {"station_order": 4, "equipment_type": "AOI", "cycle_time_sec": 25.0},
+            ],
+            source="manual",
+        ),
+        # MOTOR-M50: Assembly flow
+        ProcessRoute(
+            product_id=PRODUCT_IDS["MOTOR-M50"],
+            version=1,
+            is_active=True,
+            steps=[
+                {"station_order": 1, "equipment_type": "assembly", "cycle_time_sec": 90.0},
+                {"station_order": 2, "equipment_type": "soldering", "cycle_time_sec": 60.0},
+                {"station_order": 3, "equipment_type": "test", "cycle_time_sec": 45.0},
+            ],
+            source="manual",
+        ),
+        # CABLE-C10: Simple assembly
+        ProcessRoute(
+            product_id=PRODUCT_IDS["CABLE-C10"],
+            version=1,
+            is_active=True,
+            steps=[
+                {"station_order": 1, "equipment_type": "assembly", "cycle_time_sec": 40.0},
+                {"station_order": 2, "equipment_type": "test", "cycle_time_sec": 20.0},
+            ],
+            source="manual",
+        ),
+        # HOUSING-H3: CNC + assembly
+        ProcessRoute(
+            product_id=PRODUCT_IDS["HOUSING-H3"],
+            version=1,
+            is_active=True,
+            steps=[
+                {"station_order": 1, "equipment_type": "CNC", "cycle_time_sec": 180.0},
+                {"station_order": 2, "equipment_type": "assembly", "cycle_time_sec": 120.0},
+                {"station_order": 3, "equipment_type": "test", "cycle_time_sec": 60.0},
+                {"station_order": 4, "equipment_type": "packaging", "cycle_time_sec": 30.0},
+            ],
+            source="manual",
+        ),
+    ]
+
+
+def _create_line_capabilities() -> list[LineCapabilityMatrix]:
+    """Create capability matrix entries for each production line."""
+    return [
+        # SMT-Line-1
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["SMT-Line-1"],
+            equipment_type="solder_paste",
+            capability_params={"accuracy_um": 25, "max_board_size_mm": 400},
+        ),
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["SMT-Line-1"],
+            equipment_type="SMT",
+            capability_params={"min_pitch_mm": 0.4, "heads": 8, "cph": 40000},
+        ),
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["SMT-Line-1"],
+            equipment_type="reflow",
+            capability_params={"max_temp_c": 260, "zones": 10},
+        ),
+        # SMT-Line-2
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["SMT-Line-2"],
+            equipment_type="solder_paste",
+            capability_params={"accuracy_um": 15, "max_board_size_mm": 350},
+        ),
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["SMT-Line-2"],
+            equipment_type="SMT",
+            capability_params={"min_pitch_mm": 0.3, "heads": 12, "cph": 30000},
+        ),
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["SMT-Line-2"],
+            equipment_type="reflow",
+            capability_params={"max_temp_c": 280, "zones": 12},
+        ),
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["SMT-Line-2"],
+            equipment_type="AOI",
+            capability_params={"resolution_um": 10, "speed_cm2_per_sec": 50},
+        ),
+        # Assembly-A
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["Assembly-A"],
+            equipment_type="assembly",
+            capability_params={"type": "manual_assisted", "stations": 4},
+        ),
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["Assembly-A"],
+            equipment_type="soldering",
+            capability_params={"type": "wave_soldering", "max_temp_c": 280},
+        ),
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["Assembly-A"],
+            equipment_type="test",
+            capability_params={"type": "functional_test", "channels": 8},
+        ),
+        # Assembly-B
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["Assembly-B"],
+            equipment_type="CNC",
+            capability_params={"axes": 5, "precision_um": 5, "material": ["aluminum", "steel"]},
+        ),
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["Assembly-B"],
+            equipment_type="assembly",
+            capability_params={"type": "precision_assembly", "clean_room": False},
+        ),
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["Assembly-B"],
+            equipment_type="test",
+            capability_params={"type": "environmental_test", "ip_rating": "IP65"},
+        ),
+        LineCapabilityMatrix(
+            production_line_id=LINE_IDS["Assembly-B"],
+            equipment_type="packaging",
+            capability_params={"type": "vacuum_sealed", "max_weight_kg": 50},
+        ),
+    ]
+
+
 async def seed_demo_data(session: AsyncSession) -> dict[str, int]:
     """Seed the database with demo data for all 4 core scenarios.
 
@@ -348,6 +591,17 @@ async def seed_demo_data(session: AsyncSession) -> dict[str, int]:
 
     await session.flush()
 
+    # Phase 1: Process stations, routes, and capabilities
+    stations = _create_process_stations()
+    routes = _create_process_routes()
+    capabilities = _create_line_capabilities()
+
+    session.add_all(stations)
+    session.add_all(routes)
+    session.add_all(capabilities)
+
+    await session.flush()
+
     total_items = sum(len(order.items) for order in orders)
 
     return {
@@ -355,6 +609,9 @@ async def seed_demo_data(session: AsyncSession) -> dict[str, int]:
         "production_lines": len(lines),
         "orders": len(orders),
         "order_items": total_items,
+        "process_stations": len(stations),
+        "process_routes": len(routes),
+        "line_capabilities": len(capabilities),
     }
 
 
