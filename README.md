@@ -33,6 +33,9 @@ AutoPilot SME 是一個專為台灣中小型製造業（20-200 人）打造的 A
 ### 6. 敏感資料保護
 自動偵測 PII 等敏感資料，在送出至外部 LLM 前進行遮罩處理；高敏感內容自動路由至本地模型。
 
+### 7. 產線設備整合（Phase 1）
+支援多站製程建模，定義產品的製程路線（Process Route），透過能力矩陣（Capability Matrix）自動匹配適合的產線，並以瓶頸工站計算生產時間。
+
 ## 安全機制
 
 | 機制 | 說明 |
@@ -193,6 +196,23 @@ POST   /api/v1/chat                # AI 對話
 GET    /api/v1/memory/search       # 記憶搜尋
 GET    /api/v1/compliance/usage    # 模型用量統計
 GET    /api/v1/compliance/decisions # 決策稽核紀錄
+
+# Phase 1: 產線設備整合
+GET    /api/v1/stations            # 查詢工站列表
+POST   /api/v1/stations            # 建立工站
+GET    /api/v1/stations/{id}       # 查詢單筆工站
+PUT    /api/v1/stations/{id}       # 更新工站
+DELETE /api/v1/stations/{id}       # 刪除工站
+GET    /api/v1/process-routes      # 查詢製程路線列表
+POST   /api/v1/process-routes      # 建立製程路線
+GET    /api/v1/process-routes/{id} # 查詢單筆製程路線
+PUT    /api/v1/process-routes/{id} # 更新製程路線
+DELETE /api/v1/process-routes/{id} # 刪除製程路線
+GET    /api/v1/line-capabilities   # 查詢產線能力矩陣
+POST   /api/v1/line-capabilities   # 建立產線能力項目
+GET    /api/v1/line-capabilities/{id} # 查詢單筆能力項目
+DELETE /api/v1/line-capabilities/{id} # 刪除能力項目
+GET    /api/v1/matching/product-lines # 產品與產線能力匹配
 ```
 
 完整 API 文件請參考：http://localhost:8000/docs
@@ -224,11 +244,18 @@ autopilot-sme/
 │   │   │   ├── redis.py        # Redis 連線（app.state 管理）
 │   │   │   └── qdrant.py       # Qdrant 連線（app.state + DI）
 │   │   ├── models/             # SQLAlchemy 資料模型
+│   │   │   ├── order.py        # 訂單
+│   │   │   ├── product.py      # 產品主檔
+│   │   │   ├── production_line.py # 產線
+│   │   │   ├── process_station.py # 工站（Phase 1）
+│   │   │   ├── process_route.py   # 製程路線（Phase 1）
+│   │   │   ├── line_capability.py # 產線能力矩陣（Phase 1）
+│   │   │   └── ...             # 排程、記憶、合規等模型
 │   │   ├── schemas/            # Pydantic 請求/回應 Schema
 │   │   ├── services/           # 業務邏輯層
-│   │   │   ├── scheduler.py    # 排程引擎
+│   │   │   ├── scheduler.py    # 排程引擎（支援製程路線時間估算）
 │   │   │   ├── simulator.py    # 模擬引擎
-│   │   │   ├── production_helpers.py # 排程/模擬共用工具函式
+│   │   │   ├── production_helpers.py # 排程/模擬共用工具函式（含瓶頸計算、能力匹配）
 │   │   │   ├── chat_service.py # 對話服務
 │   │   │   ├── memory_service.py # 記憶系統
 │   │   │   ├── llm_router.py   # LLM 多模型路由（含 usage 持久化）
@@ -236,7 +263,7 @@ autopilot-sme/
 │   │   │   └── compliance_service.py # 合規追蹤
 │   │   └── db/                 # 資料庫初始化 & 種子資料
 │   ├── alembic/                # 資料庫遷移
-│   ├── tests/                  # 測試（207 tests）
+│   ├── tests/                  # 測試（287 tests）
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/                   # Next.js 前端
@@ -258,7 +285,7 @@ autopilot-sme/
 
 ## 測試
 
-後端測試使用 pytest，目前共 207 個測試案例：
+後端測試使用 pytest，目前共 287 個測試案例：
 
 ```bash
 cd backend
@@ -273,6 +300,7 @@ pytest
 - Scheduler 重複排程防護
 - LLM Usage 持久化驗證
 - 跨服務整合測試（Chat → LLM → Memory pipeline）
+- Phase 1：工站 CRUD、製程路線 CRUD、能力矩陣、產品匹配、瓶頸計算、種子資料驗證
 
 ## 環境變數說明
 
