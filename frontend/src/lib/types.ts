@@ -89,6 +89,90 @@ export interface ProductionLineResponse {
   updated_at: string
 }
 
+// ─── Process Station ────────────────────────────────────────────────────────
+
+export interface ProcessStationCreate {
+  production_line_id: string
+  name: string
+  station_order: number
+  equipment_type: string
+  standard_cycle_time: number
+  actual_cycle_time?: number | null
+  capabilities?: Record<string, unknown> | null
+  status?: string
+}
+
+export interface ProcessStationResponse {
+  id: string
+  production_line_id: string
+  name: string
+  station_order: number
+  equipment_type: string
+  standard_cycle_time: number
+  actual_cycle_time: number | null
+  capabilities: Record<string, unknown> | null
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+// ─── Process Route ──────────────────────────────────────────────────────────
+
+export interface RouteStep {
+  station_order: number
+  equipment_type: string
+  cycle_time_sec: number
+  actual_cycle_time_sec?: number | null
+}
+
+export interface ProcessRouteCreate {
+  product_id: string
+  version?: number
+  is_active?: boolean
+  steps: RouteStep[]
+  source?: 'manual' | 'spec_parsed' | 'mes_learned'
+  source_file?: string | null
+}
+
+export interface ProcessRouteResponse {
+  id: string
+  product_id: string
+  version: number
+  is_active: boolean
+  steps: RouteStep[]
+  source: string
+  source_file: string | null
+  created_at: string
+  updated_at: string
+}
+
+// ─── Line Capability ───────────────────────────────────────────────────────
+
+export interface LineCapabilityCreate {
+  production_line_id: string
+  equipment_type: string
+  capability_params?: Record<string, unknown> | null
+  throughput_range?: Record<string, unknown> | null
+}
+
+export interface LineCapabilityResponse {
+  id: string
+  production_line_id: string
+  equipment_type: string
+  capability_params: Record<string, unknown> | null
+  throughput_range: Record<string, unknown> | null
+  updated_at: string
+}
+
+// ─── Product-Line Matching ──────────────────────────────────────────────────
+
+export interface ProductLineMatch {
+  production_line_id: string
+  name: string
+  matched_types: string[]
+  all_types: string[]
+}
+
 // ─── Schedule ────────────────────────────────────────────────────────────────
 
 export interface ScheduleRequest {

@@ -11,11 +11,18 @@ import type {
   DeliveryEstimateRequest,
   DeliveryEstimateResponse,
   HealthCheck,
+  LineCapabilityCreate,
+  LineCapabilityResponse,
   MemoryEntryResponse,
   MemorySearch,
   OrderCreate,
   OrderResponse,
+  ProcessRouteCreate,
+  ProcessRouteResponse,
+  ProcessStationCreate,
+  ProcessStationResponse,
   ProductCreate,
+  ProductLineMatch,
   ProductResponse,
   ProductionLineCreate,
   ProductionLineResponse,
@@ -193,6 +200,122 @@ export async function updateProductionLine(id: string, data: Partial<ProductionL
 
 export async function deleteProductionLine(id: string): Promise<void> {
   return request<void>(`/production-lines/${id}`, { method: 'DELETE' })
+}
+
+// ─── Process Stations ───────────────────────────────────────────────────────
+
+export async function listStations(params?: {
+  production_line_id?: string
+  skip?: number
+  limit?: number
+}): Promise<ProcessStationResponse[]> {
+  const qs = new URLSearchParams()
+  if (params?.production_line_id) qs.set('production_line_id', params.production_line_id)
+  if (params?.skip != null) qs.set('skip', String(params.skip))
+  if (params?.limit != null) qs.set('limit', String(params.limit))
+  const query = qs.toString()
+  return request<ProcessStationResponse[]>(`/stations${query ? `?${query}` : ''}`)
+}
+
+export async function getStation(id: string): Promise<ProcessStationResponse> {
+  return request<ProcessStationResponse>(`/stations/${id}`)
+}
+
+export async function createStation(data: ProcessStationCreate): Promise<ProcessStationResponse> {
+  return request<ProcessStationResponse>('/stations', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateStation(id: string, data: ProcessStationCreate): Promise<ProcessStationResponse> {
+  return request<ProcessStationResponse>(`/stations/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteStation(id: string): Promise<void> {
+  return request<void>(`/stations/${id}`, { method: 'DELETE' })
+}
+
+// ─── Process Routes ─────────────────────────────────────────────────────────
+
+export async function listProcessRoutes(params?: {
+  product_id?: string
+  active_only?: boolean
+  skip?: number
+  limit?: number
+}): Promise<ProcessRouteResponse[]> {
+  const qs = new URLSearchParams()
+  if (params?.product_id) qs.set('product_id', params.product_id)
+  if (params?.active_only) qs.set('active_only', 'true')
+  if (params?.skip != null) qs.set('skip', String(params.skip))
+  if (params?.limit != null) qs.set('limit', String(params.limit))
+  const query = qs.toString()
+  return request<ProcessRouteResponse[]>(`/process-routes${query ? `?${query}` : ''}`)
+}
+
+export async function getProcessRoute(id: string): Promise<ProcessRouteResponse> {
+  return request<ProcessRouteResponse>(`/process-routes/${id}`)
+}
+
+export async function createProcessRoute(data: ProcessRouteCreate): Promise<ProcessRouteResponse> {
+  return request<ProcessRouteResponse>('/process-routes', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateProcessRoute(id: string, data: ProcessRouteCreate): Promise<ProcessRouteResponse> {
+  return request<ProcessRouteResponse>(`/process-routes/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteProcessRoute(id: string): Promise<void> {
+  return request<void>(`/process-routes/${id}`, { method: 'DELETE' })
+}
+
+// ─── Line Capabilities ─────────────────────────────────────────────────────
+
+export async function listLineCapabilities(params?: {
+  production_line_id?: string
+  skip?: number
+  limit?: number
+}): Promise<LineCapabilityResponse[]> {
+  const qs = new URLSearchParams()
+  if (params?.production_line_id) qs.set('production_line_id', params.production_line_id)
+  if (params?.skip != null) qs.set('skip', String(params.skip))
+  if (params?.limit != null) qs.set('limit', String(params.limit))
+  const query = qs.toString()
+  return request<LineCapabilityResponse[]>(`/line-capabilities${query ? `?${query}` : ''}`)
+}
+
+export async function createLineCapability(data: LineCapabilityCreate): Promise<LineCapabilityResponse> {
+  return request<LineCapabilityResponse>('/line-capabilities', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteLineCapability(id: string): Promise<void> {
+  return request<void>(`/line-capabilities/${id}`, { method: 'DELETE' })
+}
+
+// ─── Product-Line Matching ──────────────────────────────────────────────────
+
+export async function matchProductToLines(params: {
+  product_id: string
+  equipment_types: string[]
+}): Promise<ProductLineMatch[]> {
+  const qs = new URLSearchParams()
+  qs.set('product_id', params.product_id)
+  for (const t of params.equipment_types) {
+    qs.append('equipment_types', t)
+  }
+  return request<ProductLineMatch[]>(`/matching/product-lines?${qs.toString()}`)
 }
 
 // ─── Schedule ────────────────────────────────────────────────────────────────
