@@ -566,6 +566,34 @@ class SchedulerService:
     _calculate_job_overtime = staticmethod(calculate_job_overtime)
 
     @staticmethod
+    def _estimate_hours_from_route(
+        steps: list[dict],
+        quantity: int,
+        yield_rate: float,
+        efficiency_factor: float,
+        setup_time_min: float,
+    ) -> float:
+        """Estimate production hours using process route bottleneck analysis.
+
+        Calls calculate_production_time() for the core bottleneck calculation,
+        then adds setup time. Used optionally when a task has a process route.
+
+        Args:
+            steps: Route steps from ProcessRoute.steps JSONB.
+            quantity: Number of units.
+            yield_rate: Expected yield rate (0-1).
+            efficiency_factor: Line efficiency factor (0-1).
+            setup_time_min: Setup/changeover time in minutes.
+
+        Returns:
+            Estimated production hours (including setup).
+        """
+        from app.services.production_helpers import calculate_production_time
+
+        prod_minutes = calculate_production_time(steps, quantity, yield_rate, efficiency_factor)
+        return (prod_minutes + setup_time_min) / 60.0
+
+    @staticmethod
     def _job_to_response(job: ScheduledJob) -> ScheduledJobResponse:
         """Convert a ScheduledJob model to a response schema."""
         return ScheduledJobResponse(
