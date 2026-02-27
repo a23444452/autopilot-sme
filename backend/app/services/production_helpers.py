@@ -105,6 +105,68 @@ def calculate_job_overtime(start: datetime, end: datetime) -> float:
     return max(overtime, 0.0)
 
 
+def calculate_production_time(
+    steps: list[dict],
+    quantity: int,
+    yield_rate: float = 1.0,
+    efficiency_factor: float = 1.0,
+) -> float:
+    """Calculate production time in minutes using bottleneck station analysis.
+
+    The bottleneck is the station with the longest cycle time. Total time
+    is determined by the bottleneck cycle time * adjusted quantity.
+
+    Uses actual_cycle_time_sec when available, falls back to cycle_time_sec.
+
+    Args:
+        steps: List of route steps, each with cycle_time_sec and optional actual_cycle_time_sec.
+        quantity: Number of units to produce.
+        yield_rate: Expected yield rate (0-1). Adjusts quantity upward.
+        efficiency_factor: Line efficiency factor (0-1). Adjusts time upward.
+
+    Returns:
+        Production time in minutes.
+    """
+    if not steps:
+        return 0.0
+
+    effective_quantity = quantity / max(yield_rate, 0.01)
+
+    bottleneck_sec = max(
+        step.get("actual_cycle_time_sec") or step.get("cycle_time_sec", 0.0)
+        for step in steps
+    )
+
+    total_seconds = bottleneck_sec * effective_quantity / max(efficiency_factor, 0.01)
+    return total_seconds / 60.0
+
+
+def is_product_allowed_with_capabilities(
+    product_sku: str,
+    line: ProductionLine,
+    required_types: list[str] | None,
+    line_equipment_types: set[str] | None,
+) -> bool:
+    """Check if a product is allowed on a line, considering capability matrix.
+
+    Falls back to is_product_allowed() when required_types is None or empty.
+
+    Args:
+        product_sku: Product SKU to check.
+        line: ProductionLine instance.
+        required_types: Equipment types required by the product's process route.
+        line_equipment_types: Equipment types available on the line.
+
+    Returns:
+        True if the product can be produced on this line.
+    """
+    if not required_types or line_equipment_types is None:
+        return is_product_allowed(product_sku, line)
+
+    required_set = set(required_types)
+    return required_set.issubset(line_equipment_types)
+
+
 def advance_work_hours(start: datetime, hours: float) -> datetime:
     """Advance a datetime by a number of working hours, respecting work schedule."""
     remaining = hours
